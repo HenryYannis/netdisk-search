@@ -21,18 +21,24 @@ export default defineNuxtConfig({
         {
           name: "description",
           content:
-            "小宝网盘搜索引擎：聚合阿里云盘、夸克、百度网盘、115、迅雷等平台的网盘搜索工具，实时检索分享资源，快速、高效。",
+            "免费的网盘搜索引擎，一键搜索夸克网盘、阿里云盘、百度网盘、115、迅雷云盘的电影、剧集、动漫、软件、学习资料分享链接，实时聚合、自动去重、无广告。",
         },
         {
           name: "keywords",
           content:
-            "网盘搜索, 阿里云盘, 夸克, 百度网盘, 115, 迅雷, 资源搜索, 盘搜, panhub, 网盘聚合搜索",
+            "小宝网盘搜索引擎, 网盘搜索引擎, 网盘搜索, 夸克网盘搜索, 阿里云盘搜索, 百度网盘资源搜索, 115 网盘搜索, 迅雷云盘, 网盘资源, 盘搜",
         },
-        { name: "theme-color", content: "#111111" },
+        { name: "theme-color", content: "#0f766e" },
         { property: "og:type", content: "website" },
         { property: "og:site_name", content: "小宝网盘搜索引擎" },
       ],
-      link: [{ rel: "icon", type: "image/x-icon", href: "/favicon.ico" }],
+      link: [
+        { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+        { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32x32.png" },
+        { rel: "icon", type: "image/x-icon", href: "/favicon.ico" },
+        { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
+        { rel: "manifest", href: "/site.webmanifest" },
+      ],
     },
   },
   nitro: {
