@@ -65,4 +65,24 @@ describe("UnlockRateLimiter", () => {
       vi.useRealTimers();
     }
   });
+
+  it("失败计数有 TTL：长时间无新失败后清零", () => {
+    vi.useFakeTimers();
+    try {
+      const l = new UnlockRateLimiter(3, 60_000, 15 * 60_000);
+      l.recordFailure("1.2.3.4");
+      l.recordFailure("1.2.3.4");
+      vi.advanceTimersByTime(16 * 60_000);
+      l.recordFailure("1.2.3.4");
+      expect(l.isBlocked("1.2.3.4")).toBe(false); // 旧的 2 次已过期，只算 1 次
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("条目数有上限：大量 IP 不会无限增长", () => {
+    const l = new UnlockRateLimiter(5, 60_000, 15 * 60_000, 100);
+    for (let i = 0; i < 1000; i++) l.recordFailure(`10.0.${i >> 8}.${i & 255}`);
+    expect(l.size).toBeLessThanOrEqual(100);
+  });
 });
