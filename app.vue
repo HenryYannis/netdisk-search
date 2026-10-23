@@ -12,8 +12,15 @@
       <nav class="nav">
         <NuxtLink to="/" class="brand">
           <span class="brand-icon">🔍</span>
-          <span class="brand-text">PanHub</span>
+          <span class="brand-text">小宝网盘搜</span>
         </NuxtLink>
+
+        <div class="site-links">
+          <a href="https://xbkjz.cn/" target="_blank" rel="noopener"><span class="full">小宝</span>科技站</a>
+          <a href="https://xbmlz.cn/" target="_blank" rel="noopener"><span class="full">小宝</span>命理站</a>
+          <a href="https://xbyxz.cn/" target="_blank" rel="noopener"><span class="full">小宝</span>游戏站</a>
+          <a href="https://paygame.xbkjz.icu/" target="_blank" rel="noopener"><span class="full">少年</span>作品墙</a>
+        </div>
 
         <div class="nav-actions">
           <!-- 暗色模式切换 -->
@@ -280,6 +287,39 @@ function dismissAnnouncement() {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* 自有站点导航 */
+.site-links {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.site-links::-webkit-scrollbar { display: none; }
+.site-links a {
+  white-space: nowrap;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary, var(--text-primary));
+  text-decoration: none;
+  font-size: 14px;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.site-links a:hover {
+  background: var(--bg-btn);
+  color: var(--primary);
+}
+@media (max-width: 900px) {
+  .site-links a { padding: 6px 8px; font-size: 13px; }
+  .site-links .full { display: none; }
+}
+@media (max-width: 520px) {
+  .nav { flex-wrap: wrap; row-gap: 8px; }
+  .site-links { order: 3; flex-basis: 100%; justify-content: space-between; }
 }
 
 /* 导航操作区 */
