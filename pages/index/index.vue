@@ -1,43 +1,24 @@
 <template>
   <div class="home">
-    <!-- 英雄区域 + 热门搜索 -->
-    <div class="hero-row">
-      <div class="hero-noise" aria-hidden="true" />
-      <header class="hero">
-        <div class="hero-accent" aria-hidden="true" />
-        <div class="hero-content">
-          <div class="hero-badge">网盘资源聚合搜索</div>
-          <h1 class="hero-title">
-            <span class="hero-title-line">一键检索</span>
-            <span class="hero-title-line hero-title-line--accent">全网网盘资源</span>
-          </h1>
-          <p class="hero-description">
-            聚合阿里云盘、夸克、百度网盘、115、迅雷等平台 · 快速、直达、少打扰
-          </p>
-          <ul class="hero-features" role="list">
-            <li class="hero-feature">实时聚合</li>
-            <li class="hero-feature">多平台覆盖</li>
-            <li class="hero-feature">结果去重</li>
-          </ul>
-        </div>
-        <div class="hero-shape" aria-hidden="true" />
-      </header>
+    <!-- SEO 标题（原英雄区已移除，介绍文案移至页脚） -->
+    <h1 class="page-title">一键检索全网网盘资源</h1>
+
+    <!-- 热搜词云 + 热搜趋势入口：暂时关闭（features.hotSearch=false），代码保留 -->
+    <template v-if="FEATURES.hotSearch">
       <aside class="hero-aside">
         <ErrorBoundary message="热搜加载失败">
           <HotSearchSection ref="hotSearchRef" :on-search="quickSearch" />
         </ErrorBoundary>
       </aside>
-    </div>
-
-    <!-- 热搜趋势入口 -->
-    <div class="trends-entry">
-      <NuxtLink to="/hot" class="trends-entry__link">
-        <span class="trends-entry__icon">🔥</span>
-        <span class="trends-entry__text">热搜趋势</span>
-        <span class="trends-entry__hint">飙升榜 · 完整榜单</span>
-        <span class="trends-entry__arrow">→</span>
-      </NuxtLink>
-    </div>
+      <div class="trends-entry">
+        <NuxtLink to="/hot" class="trends-entry__link">
+          <span class="trends-entry__icon">🔥</span>
+          <span class="trends-entry__text">热搜趋势</span>
+          <span class="trends-entry__hint">飙升榜 · 完整榜单</span>
+          <span class="trends-entry__arrow">→</span>
+        </NuxtLink>
+      </div>
+    </template>
 
     <!-- 搜索框 -->
     <SearchBox
@@ -129,7 +110,7 @@
         <div class="empty-icon">🔍</div>
         <h3>未找到相关资源</h3>
         <p>试试其他关键词，或检查设置中的搜索来源是否已启用</p>
-        <div v-if="hotTerms.length > 0" class="empty-suggestions">
+        <div v-if="FEATURES.hotSearch && hotTerms.length > 0" class="empty-suggestions">
           <span class="empty-suggestions__label">大家都在搜：</span>
           <button
             v-for="term in hotTerms.slice(0, 5)"
@@ -158,8 +139,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from "vue";
+import { ref, computed, onMounted, nextTick } from "vue";
 import { PLATFORM_INFO } from "~/config/plugins";
+import { FEATURES } from "~/config/features";
 
 const config = useRuntimeConfig();
 const apiBase = (config.public?.apiBase as string) || "/api";
@@ -181,26 +163,46 @@ onMounted(async () => {
     await doSearch();
   }
   if (doubanHotRef.value) await doubanHotRef.value.init();
-  if (hotSearchRef.value) await hotSearchRef.value.init();
-  fetchHotTerms();
+  if (FEATURES.hotSearch) {
+    if (hotSearchRef.value) await hotSearchRef.value.init();
+    fetchHotTerms();
+  }
 });
 
-// SEO 元数据
+// SEO 元数据（带 q 参数时标题/描述包含关键词，SSR 输出）
+const SITE_NAME = "小宝网盘搜索引擎";
+const HOME_TITLE = "小宝网盘搜索引擎 - 免费网盘资源搜索｜夸克、阿里云盘、百度网盘一键搜";
+const HOME_DESC =
+  "免费的网盘搜索引擎，一键搜索夸克网盘、阿里云盘、百度网盘、115、迅雷云盘的电影、剧集、动漫、软件、学习资料分享链接，实时聚合、自动去重、无广告。";
+const seoTerm = computed(() => {
+  const q = route.query.q;
+  return typeof q === "string" ? q.trim().slice(0, 50) : "";
+});
+const seoTitle = computed(() =>
+  seoTerm.value
+    ? `${seoTerm.value} 网盘资源 - 夸克/阿里云盘/百度网盘 · ${SITE_NAME}`
+    : HOME_TITLE
+);
+const seoDesc = computed(() =>
+  seoTerm.value
+    ? `「${seoTerm.value}」的网盘资源搜索结果：聚合夸克网盘、阿里云盘、百度网盘、115、迅雷云盘的公开分享链接，实时更新、自动去重。`
+    : HOME_DESC
+);
+const ogImage = siteUrl ? `${siteUrl}/og.png` : "/og.png";
 useSeoMeta({
-  title: "网盘资源搜索",
-  description:
-    "聚合阿里云盘、夸克、百度网盘、115、迅雷等平台，实时检索各类分享链接与资源，免费、快速、无广告。",
-  ogTitle: "网盘资源搜索",
-  ogDescription:
-    "聚合阿里云盘、夸克、百度网盘、115、迅雷等平台，实时检索各类分享链接与资源，免费、快速、无广告。",
+  title: seoTitle,
+  titleTemplate: "%s",
+  description: seoDesc,
+  ogTitle: seoTitle,
+  ogDescription: seoDesc,
   ogType: "website",
-  ogSiteName: "小宝网盘搜索引擎",
-  ogImage: siteUrl ? `${siteUrl}/og.svg` : "/og.svg",
+  ogSiteName: SITE_NAME,
+  ogUrl: siteUrl ? `${siteUrl}/` : "/",
+  ogImage,
   twitterCard: "summary_large_image",
-  twitterTitle: "网盘资源搜索",
-  twitterDescription:
-    "聚合阿里云盘、夸克、百度网盘、115、迅雷等平台，实时检索各类分享链接与资源，免费、快速、无广告。",
-  twitterImage: siteUrl ? `${siteUrl}/og.svg` : "/og.svg",
+  twitterTitle: seoTitle,
+  twitterDescription: seoDesc,
+  twitterImage: ogImage,
 });
 
 useHead({
@@ -209,7 +211,7 @@ useHead({
     {
       name: "keywords",
       content:
-        "小宝网盘搜索引擎, 网盘搜索, 阿里云盘搜索, 夸克网盘搜索, 百度网盘搜索, 115 网盘, 迅雷云盘, 资源搜索, 盘搜, PanHub",
+        "小宝网盘搜索引擎, 网盘搜索引擎, 网盘搜索, 夸克网盘搜索, 阿里云盘搜索, 百度网盘资源搜索, 115 网盘搜索, 迅雷云盘, 网盘资源, 盘搜",
     },
   ],
   script: [
@@ -299,7 +301,7 @@ async function doSearch() {
   if (!kw.value || searchState.value.loading) return;
   loadSettings();
   const keyword = kw.value.trim();
-  recordHotSearch(keyword);
+  if (FEATURES.hotSearch) recordHotSearch(keyword);
   // 同步搜索词到 URL
   if (router) {
     router.replace({ query: { q: keyword } });
@@ -451,158 +453,12 @@ function visibleSorted(items: any[]) {
 }
 
 /* 英雄区域 + 热门搜索（frontend-design: editorial + industrial） */
-.hero-row {
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  position: relative;
-  background: rgba(15, 118, 110, 0.12);
-  border-radius: 20px;
-  box-shadow: 0 4px 20px -4px rgba(15, 118, 110, 0.15);
-  overflow: hidden;
-}
-
-.hero-noise {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.04;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  mix-blend-mode: overlay;
-  z-index: 0;
-}
-
-.hero {
-  flex: 1;
-  min-width: 0;
-  padding: 24px 28px;
-  text-align: left;
-  position: relative;
-  z-index: 1;
-}
-
-.hero-accent {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 6px;
-  height: 100%;
-  background: var(--primary);
-  opacity: 1;
-}
-
-.hero-content {
-  position: relative;
-  z-index: 2;
-  padding-left: 12px;
-}
-
-.hero-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--primary);
-  margin-bottom: 10px;
-  padding: 6px 12px;
-  background: rgba(15, 118, 110, 0.12);
-  border: 1px solid rgba(15, 118, 110, 0.25);
-  border-radius: 8px;
-  font-family: "Manrope", sans-serif;
-  animation: heroReveal 0.6s ease-out both;
-  animation-delay: 0.05s;
-}
-
-.hero-title {
-  font-family: "Syne", "Manrope", sans-serif;
-  font-size: 36px;
-  font-weight: 800;
-  margin: 0 0 10px;
+.page-title {
+  margin: 8px 0 14px;
+  font-size: 20px;
+  font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: -0.04em;
-  line-height: 1.1;
-  max-width: 560px;
-  animation: heroReveal 0.6s ease-out both;
-  animation-delay: 0.12s;
-}
-
-.hero-title-line {
-  display: block;
-}
-
-.hero-title-line--accent {
-  background: var(--primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.hero-description {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 0 0 16px;
-  line-height: 1.65;
-  max-width: 520px;
-  animation: heroReveal 0.6s ease-out both;
-  animation-delay: 0.2s;
-}
-
-.hero-features {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 20px;
-}
-
-.hero-feature {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--primary-dark);
-  padding: 6px 12px;
-  background: var(--bg-input);
-  border: 1px solid rgba(15, 118, 110, 0.2);
-  border-radius: 10px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  animation: heroReveal 0.6s ease-out both;
-}
-
-.hero-feature:nth-child(1) { animation-delay: 0.28s; }
-.hero-feature:nth-child(2) { animation-delay: 0.34s; }
-.hero-feature:nth-child(3) { animation-delay: 0.4s; }
-
-.hero-feature:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(15, 118, 110, 0.15);
-  border-color: rgba(15, 118, 110, 0.35);
-}
-
-.hero-shape {
-  display: none;
-  position: absolute;
-  right: 8%;
-  bottom: 10%;
-  width: 120px;
-  height: 120px;
-  background: rgba(15, 118, 110, 0.15);
-  border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
-  filter: blur(24px);
-  pointer-events: none;
-  z-index: 0;
-}
-
-@keyframes heroReveal {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  letter-spacing: 0.01em;
 }
 
 .hero-aside {
