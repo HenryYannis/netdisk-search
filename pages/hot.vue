@@ -153,6 +153,9 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick } from "vue";
+import { FEATURES } from "~/config/features";
+// 热搜功能暂时关闭：访问 /hot 直接回首页
+if (!FEATURES.hotSearch) await navigateTo("/", { redirectCode: 302 });
 
 interface DayInfo {
   date: string;
