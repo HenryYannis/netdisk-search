@@ -33,7 +33,7 @@
 | **quark4k** | `quark4k.com/api/discussions`（Flarum） | **38 条** | 夸克 |
 | **u3c3** | `u3c3u3c3.u3c3u3c3u3c3.com/?search=` | **62 条** | 磁力 |
 | **yunso** | POST `www.yunso.net/api/Core/search2` | **19 条** | 夸克+天翼 |
-| **ouge / wanou** | `woog.nxog.eu.org/api.php/provide/vod?ac=detail&wd=` | 3 条 | UC |
+| **ouge**（wanou 与其重复，已于 2026-10-23 删除） | `woog.nxog.eu.org/api.php/provide/vod?ac=detail&wd=` | 3 条 | UC |
 | **quarktv** | `www.quarktv.com/?s=` | 有 | 夸克 |
 | **dyyjpro** | `dyyjpro.com/?s=` | 有 | 夸克 |
 | **jsnoteclub** | `jsnoteclub.com/?s=` | 有 | 夸克 |
