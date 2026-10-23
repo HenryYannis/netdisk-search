@@ -72,7 +72,7 @@
 ### Docker 部署（推荐）
 
 ```bash
-git clone -b mit-base https://github.com/HenryYannis/netdisk-search.git
+git clone https://github.com/HenryYannis/netdisk-search.git
 cd netdisk-search
 docker compose up -d --build
 ```
