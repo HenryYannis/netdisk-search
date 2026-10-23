@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchWithRetry, safeExecute, safeExecuteAll } from "../../server/core/utils/fetch";
+import { fetchWithRetry, safeExecute } from "../../server/core/utils/fetch";
 import * as ofetchModule from "ofetch";
 
 // Mock ofetch
@@ -126,40 +126,19 @@ describe("safeExecute", () => {
   });
 });
 
-describe("safeExecuteAll", () => {
-  it("应该并行执行所有操作并返回结果", async () => {
-    const operations = [
-      async () => "result1",
-      async () => "result2",
-      async () => "result3",
-    ];
-    const results = await safeExecuteAll(operations, "fallback");
-    expect(results).toEqual(["result1", "result2", "result3"]);
-  });
-
-  it("应该处理部分操作失败的情况", async () => {
-    const operations = [
-      async () => "result1",
-      async () => {
-        throw new Error("failed");
-      },
-      async () => "result3",
-    ];
-    const results = await safeExecuteAll(operations, "fallback");
-    expect(results).toEqual(["result1", "fallback", "result3"]);
-  });
-
-  it("应该处理空数组", async () => {
-    const results = await safeExecuteAll([], "fallback");
-    expect(results).toEqual([]);
-  });
-
-  it("应该处理所有操作都失败的情况", async () => {
-    const operations = [
-      async () => { throw new Error("error1"); },
-      async () => { throw new Error("error2"); },
-    ];
-    const results = await safeExecuteAll(operations, "default");
-    expect(results).toEqual(["default", "default"]);
+describe("fetchWithRetry signal 透传", () => {
+  it("把 signal 传给底层请求，abort 后不再重试", async () => {
+    const mockFetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    vi.mocked(ofetchModule.ofetch.create).mockReturnValue(mockFetch as any);
+    const ac = new AbortController();
+    const p = fetchWithRetry(
+      "https://api.example.com/test",
+      {},
+      { maxRetries: 3, baseDelay: 50, logWarnings: false, signal: ac.signal }
+    );
+    ac.abort();
+    await expect(p).rejects.toBeDefined();
+    expect(mockFetch.mock.calls[0]?.[1]).toEqual({ signal: ac.signal });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });
