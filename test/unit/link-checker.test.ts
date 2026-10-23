@@ -12,6 +12,8 @@ import {
   classify115,
   classifyMobile,
   detectPlatform,
+  buildUCCheckUrl,
+  isAllowedCheckUrl,
   extractAliyunShareID,
   extractQuarkShareIDAndPassword,
   extractBaiduShareInfo,
@@ -323,6 +325,44 @@ describe("linkChecker / detectPlatform", () => {
     expect(detectPlatform("magnet:?xt=urn:btih:abcdef")).toBe("others");
     expect(detectPlatform("ed2k://|file|a.avi|1|hash|/")).toBe("others");
     expect(detectPlatform("https://example.com/foo")).toBe("others");
+  });
+});
+
+describe("linkChecker / SSRF 防护", () => {
+  it("平台按 hostname 精确识别：query/fragment 里出现网盘域名不算", () => {
+    expect(detectPlatform("http://172.17.0.1:2375/version#drive.uc.cn")).toBe("others");
+    expect(detectPlatform("http://127.0.0.1:4000/x?drive.uc.cn")).toBe("others");
+    expect(detectPlatform("http://169.254.169.254/latest/meta-data/?pan.quark.cn")).toBe("others");
+    expect(detectPlatform("https://evil.com/drive.uc.cn/s/abc")).toBe("others");
+    expect(detectPlatform("https://drive.uc.cn.evil.com/s/abc")).toBe("others");
+    expect(detectPlatform("https://user:pw@drive.uc.cn/s/abc")).toBe("others");
+    expect(detectPlatform("https://drive.uc.cn:8443/s/abc")).toBe("others");
+    expect(detectPlatform("file:///etc/passwd#drive.uc.cn")).toBe("others");
+  });
+
+  it("UC 只请求按 share id 重建的规范 https 地址", () => {
+    expect(buildUCCheckUrl("http://drive.uc.cn/s/abc123?public=1#x")).toBe(
+      "https://drive.uc.cn/s/abc123"
+    );
+    expect(buildUCCheckUrl("https://drive.uc.cn/other")).toBe("");
+    expect(buildUCCheckUrl("https://evil.com/s/abc")).toBe("");
+  });
+
+  it("请求白名单：只允许固定网盘域名的 https", () => {
+    expect(isAllowedCheckUrl("https://drive-h.quark.cn/1/clouddrive/x")).toBe(true);
+    expect(isAllowedCheckUrl("https://api.aliyundrive.com/adrive/v3/x")).toBe(true);
+    expect(isAllowedCheckUrl("http://drive.uc.cn/s/abc")).toBe(false);
+    expect(isAllowedCheckUrl("https://127.0.0.1/")).toBe(false);
+    expect(isAllowedCheckUrl("https://169.254.169.254/")).toBe(false);
+    expect(isAllowedCheckUrl("https://drive.uc.cn.evil.com/")).toBe(false);
+  });
+
+  it("不支持的链接不进缓存", async () => {
+    _clearLinkCheckCache();
+    const r1 = await checkLink({ url: "https://example.com/a" });
+    const r2 = await checkLink({ url: "https://example.com/a" });
+    expect(r1.status).toBe("unsupported");
+    expect(r2.cacheHit).toBeUndefined();
   });
 });
 
