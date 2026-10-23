@@ -1,18 +1,19 @@
-# PanHub · 全网最全的网盘搜索
+# 小宝网盘搜索引擎 · netdisk-search
 
-> 一个搜索框，搜遍全网网盘资源 —— 即搜即得、聚合去重、免费开源、零广告、轻量部署
+> 自托管的网盘搜索引擎：检索夸克、阿里云盘、百度网盘、115、迅雷等平台的公开分享链接，免登录、无广告。
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwu529778790%2Fpanhub.shenzjd.com&project-name=panhub&repository-name=panhub.shenzjd.com)
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/wu529778790/panhub.shenzjd.com)
-[![Docker Hub](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/wu529778790/panhub.shenzjd.com/pkgs/container/panhub)
+**在线使用**：<https://pan.xbkjz.icu>
 
-**在线体验**：<https://panhub.shenzjd.com>
+本项目基于 [PanHub](https://github.com/wu529778790/panhub.shenzjd.com) 最后一个 MIT 许可版本（commit `5033c02`，2026-08-20）二次开发，遵循 MIT 协议，原版权声明保留在 [LICENSE](./LICENSE)。
 
----
+### 与上游的主要区别
 
-## 🤝 合作伙伴
+- 去掉公众号登录、社交链接和悬浮组件，打开即用
+- 界面改为纯色风格，顶部导航接入小宝系列站点
+- 豆瓣榜单改为上一页 / 下一页翻页
+- 新增页脚免责声明
 
-- [AI 全自动推广拓客 - 智能外呼机器人](https://bizbot.zvo.cn)
+> 免责声明：本项目仅搜索互联网公开分享的链接，不存储、上传或制作任何文件，仅供学习交流。
 
 ---
 
@@ -68,68 +69,25 @@
 
 ## 🚀 快速开始
 
-### 方式一：Vercel 一键部署（推荐）
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fwu529778790%2Fpanhub.shenzjd.com&project-name=panhub&repository-name=panhub.shenzjd.com)
-
-点击按钮后 Vercel 会自动：克隆仓库到你的 GitHub 账号 → 检测 Nuxt 框架并配置构建（`npm run build`，Vercel 自动使用 vercel preset）→ 部署。无需手动配置构建命令。
-
-**热搜功能依赖 Turso，必须配置**：部署完成后到 Vercel 项目 **Settings → Environment Variables** 添加：
-
-| 名称 | 值 |
-| ------ | ----- |
-| `TURSO_URL` | `libsql://<db>-<org>.turso.io` |
-| `TURSO_AUTH_TOKEN` | Turso 控制台生成的 Token |
-
-添加后**重新部署一次**（Deployments → Redeploy）即生效。未配置时站点搜索等核心功能正常，热搜接口返回空数据（不报错）。
-
-### 方式二：Cloudflare Workers 一键部署
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/wu529778790/panhub.shenzjd.com)
-
-点击按钮后 Cloudflare 会自动：克隆仓库到你的 GitHub 账号 → 配置 Workers Builds（每次 push 自动构建部署）。
-
-> **部署配置**：在 Cloudflare 配置页将 **Build command** 设为 `npm run build:cf`（deploy command 会自动检测为 `npx wrangler deploy`）。部署完成后可在 Cloudflare Dashboard 的 **Workers Builds** 中关联仓库生产分支，实现 push 即自动更新。
-
-**热搜功能依赖 Turso，必须配置**：热搜数据统一存 Turso（libSQL，免费档 5 亿行读/月、1000 万行写/月）。配置两步即可启用：
-
-1. 到 [turso.tech](https://turso.tech) 注册并创建数据库，拿到 URL 和 Token
-2. 在 Worker 设置中添加两个 Secret（Dashboard → Workers → 你的 Worker → Settings → Variables and Secrets）：
-
-| 名称 | 值 |
-| ------ | ----- |
-| `TURSO_URL` | `libsql://<db>-<org>.turso.io` |
-| `TURSO_AUTH_TOKEN` | Turso 控制台生成的 Token |
-
-> 未配置时站点搜索等核心功能正常，热搜接口返回空数据（不报错，页面表现为无热搜）。本地开发 / Docker 部署在 `.env` 中配置同样的两个变量即可。
-
-### 方式三：Docker 部署
+### Docker 部署（推荐）
 
 ```bash
-# 快速启动
-docker run --name panhub -p 4000:4000 -d ghcr.io/wu529778790/panhub.shenzjd.com:latest
-
-# 数据持久化（推荐）
-mkdir -p /root/panhub/data
-docker run -d --name panhub -p 4000:4000 \
-  -v /root/panhub/data:/app/data \
-  ghcr.io/wu529778790/panhub.shenzjd.com:latest
+git clone -b mit-base https://github.com/HenryYannis/netdisk-search.git
+cd netdisk-search
+docker compose up -d --build
 ```
 
-### 方式四：本地开发
+启动后访问 `http://服务器IP:4000`。热搜数据保存在 `./data`。
+
+> 搜索依赖抓取 Telegram 频道，服务器需要能直接访问 Telegram（一般部署在海外服务器）。
+
+### 本地开发
 
 ```bash
-# 安装依赖
 npm install
-
-# 开发服务器
-npm dev
-
-# 运行测试
-npm test
-
-# 构建生产版本
-npm build
+npm run dev      # 开发服务器
+npm test         # 运行测试
+npm run build    # 构建生产版本
 ```
 
 ---
@@ -274,37 +232,14 @@ npm test:coverage
 
 ---
 
-## 🍴 Fork 自动同步
-
-仓库内置了 [`.github/workflows/sync-upstream.yml`](.github/workflows/sync-upstream.yml)，fork 之后每天 03:00 UTC 会自动拉取上游 `main` 合并回你的 fork（也可在 Actions 里手动触发）。
-
-**默认行为**：自动同步全部代码；`.github/workflows/` 目录保持 fork 本地版本（不会覆盖你 fork 里的 workflow 文件）。这是 GitHub 的硬性规则——`GITHUB_TOKEN` 永远没有 `workflows` 权限，任何 `permissions:` 声明都无法授予，推送 workflow 文件会被整次拒绝。
-
-**想连 workflow 文件一起同步**：在 fork 的 **Settings → Secrets and variables → Actions** 添加 `SYNC_TOKEN` secret：
-
-- Fine-grained PAT：勾选 Contents **Read and write** + Workflows **Read and write**（Metadata 自动只读）
-- 或 Classic PAT：勾选 `workflow` scope
-
-配置后自动同步即升级为完整同步（含 `.github/workflows/`）。
-
-**遇到报错怎么办**：如果看到
-
-```
-! [remote rejected] main -> main (refusing to allow a GitHub App to create or update
-  workflow `.github/workflows/xxx.yml` without `workflows` permission)
-```
-
-这是旧版同步逻辑用 `GITHUB_TOKEN` 推送了 workflow 文件所致。升级到新版（自动跳过 workflow 文件）后不再出现；若 fork 卡在旧版，**手动同步一次**即可恢复：fork 页面 → **Sync fork** → **Update branch**，或 `gh repo sync <你的账号>/panhub.shenzjd.com`。
-
----
-
 ## 🛡️ 免责声明
 
 - 本项目仅用于技术学习与搜索聚合演示
 - 不存储、不传播任何受版权保护的内容
 - 所有资源链接来自公开网络（Telegram 频道、第三方网站）
 - 请遵守当地法律法规与平台使用条款
-- 侵权问题请联系源站处理
+- 下载后请于 24 小时内删除，支持正版
+- 侵权问题请联系源站处理，或联系本站删除相关搜索结果
 
 ---
 
@@ -316,6 +251,7 @@ npm test:coverage
 
 ## 🙏 鸣谢
 
+- [PanHub](https://github.com/wu529778790/panhub.shenzjd.com) - 本项目的上游（MIT 版本）
 - [Nuxt.js](https://nuxt.com/) - 渐进式 Vue 框架
 - [Nitro](https://nitro.unjs.io/) - Web 服务器工具包
 - [Cheerio](https://cheerio.js.org/) - HTML 解析器
@@ -325,6 +261,4 @@ npm test:coverage
 
 ---
 
-**⭐ 如果觉得有用，请给个 Star 支持一下！**
-
-**在线体验**：<https://panhub.shenzjd.com>
+**在线使用**：<https://pan.xbkjz.icu>
