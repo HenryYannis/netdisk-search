@@ -21,6 +21,8 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, createHash } from "node:crypto";
+import { MemoryCache } from "../cache/memoryCache";
+import { loggers } from "../utils/logger";
 
 // ========== 类型 ==========
 
@@ -88,11 +90,18 @@ function ttlFor(state: LinkCheckStatus): number {
 // ========== 网络层 ==========
 
 interface HttpResp {
+  /** HTTP 状态码；0 = 网络层失败（DNS/TLS/连接/超时） */
   status: number;
   text: string;
+  /** status=0 时：true = 真正的网络失败（计入平台熔断）；false = 本地构造请求失败 / 被拒绝的跳转 */
+  netError?: boolean;
 }
 
-/** 递归提取错误 cause 链（undici fetch 的真实错误在 cause 里） */
+/** 单次响应体上限：网盘 API/分享页都远小于此，超出即截断，防止大响应吃内存 */
+const MAX_BODY_BYTES = 512 * 1024;
+const MAX_REDIRECTS = 3;
+
+/** 递归提取错误 cause 链（undici fetch 的真实错误在 cause 里）——只写日志，绝不返回给客户端 */
 function errorChain(err: unknown): string {
   const parts: string[] = [];
   let cur: any = err;
@@ -109,6 +118,43 @@ function errorChain(err: unknown): string {
   return parts.join(" <- ");
 }
 
+/** 读响应体，最多 MAX_BODY_BYTES，超出部分丢弃并取消流 */
+async function readCappedText(res: Response): Promise<string> {
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (total < MAX_BODY_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      const room = MAX_BODY_BYTES - total;
+      chunks.push(value.byteLength > room ? value.subarray(0, room) : value);
+      total += Math.min(value.byteLength, room);
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks.map((c) => Buffer.from(c))));
+}
+
+/**
+ * 只允许请求固定的网盘域名（https）。所有探活 URL 都由服务端按 share id 拼出，
+ * 这里是第二道闸：任何跳转（3xx）到白名单外的地址都拒绝，防 SSRF。
+ */
+export function isAllowedCheckUrl(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:") return false;
+  if (u.username || u.password || u.port) return false;
+  return ALLOWED_CHECK_HOSTS.some((d) => hostIs(u.hostname.toLowerCase(), d));
+}
+
 async function httpRequest(
   url: string,
   init: RequestInit = {},
@@ -116,17 +162,44 @@ async function httpRequest(
 ): Promise<HttpResp> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let current = url;
   try {
-    const res = await fetch(url, {
-      ...init,
-      redirect: "follow",
-      signal: controller.signal,
-    });
-    const text = await res.text();
-    return { status: res.status, text };
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      if (!isAllowedCheckUrl(current)) {
+        loggers.search.warn("linkChecker: 拒绝请求非白名单地址", { url: current.slice(0, 200) });
+        return { status: 0, text: "", netError: false };
+      }
+      const res = await fetch(current, {
+        ...init,
+        // 手动跟随跳转，每一跳都重新校验域名白名单
+        redirect: "manual",
+        signal: controller.signal,
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get("location");
+        res.body?.cancel().catch(() => {});
+        if (!loc) return { status: res.status, text: "" };
+        current = new URL(loc, current).toString();
+        // 303 / 302+POST：按浏览器语义改成 GET 不带 body
+        if (res.status === 303 || ((res.status === 301 || res.status === 302) && init.method && init.method !== "GET")) {
+          init = { ...init, method: "GET", body: undefined };
+        }
+        continue;
+      }
+      const text = await readCappedText(res);
+      return { status: res.status, text };
+    }
+    return { status: 0, text: "", netError: false };
   } catch (err) {
-    // 网络层失败（DNS/TLS/连接/超时）：把错误 cause 链带出来便于诊断
-    return { status: 0, text: errorChain(err) };
+    // undici 的网络错误：TypeError("fetch failed") 带 cause，或超时 AbortError。
+    // 没有 cause 的 TypeError 是本地构造请求失败（非法 header/URL），不算平台故障。
+    const e = err as any;
+    const netError = e?.name === "AbortError" || e?.name === "TimeoutError" || !!e?.cause;
+    loggers.search.debug("linkChecker 请求失败", {
+      host: (() => { try { return new URL(current).hostname; } catch { return ""; } })(),
+      error: errorChain(err),
+    });
+    return { status: 0, text: "", netError };
   } finally {
     clearTimeout(timer);
   }
@@ -141,14 +214,16 @@ function jsonBody(resp: HttpResp): any | null {
   }
 }
 
-/** 诊断用：把失败响应压缩成一行摘要（HTTP 状态 + 响应片段） */
+/** 失败摘要（返回给客户端）：只有状态，不含错误链和响应内容 */
+const NET_FAIL_REASON = "请求失败（网络错误或超时）";
 function respSummary(resp: HttpResp): string {
-  if (resp.status === 0) return `请求失败: ${resp.text.slice(0, 120)}`;
-  const head = resp.text.replace(/\s+/g, " ").slice(0, 80);
-  if (resp.status < 200 || resp.status >= 400) {
-    return `HTTP ${resp.status} ${head}`;
+  if (resp.status === 0) {
+    return resp.netError ? NET_FAIL_REASON : "请求未发出";
   }
-  return `响应非 JSON (HTTP ${resp.status}) ${head}`;
+  if (resp.status < 200 || resp.status >= 400) {
+    return `HTTP ${resp.status}`;
+  }
+  return `响应非 JSON (HTTP ${resp.status})`;
 }
 
 function h(headers: Record<string, string>): Record<string, string> {
@@ -341,24 +416,61 @@ export function extractMobileShareID(rawURL: string): string {
 
 // ========== 平台识别 ==========
 
-const PLATFORM_MATCH: Array<[Platform, RegExp]> = [
-  ["aliyun", /(?:alipan|aliyundrive)\.com/],
-  ["quark", /pan\.quark\.cn/],
-  ["uc", /drive\.uc\.cn/],
-  ["baidu", /pan\.baidu\.com/],
-  ["tianyi", /cloud\.189\.cn/],
-  ["123", /(?:123pan|123865|123684|123912|123592|123pan\.cn)\.?/],
-  ["xunlei", /pan\.xunlei\.com/],
-  ["115", /(?:115|115cdn|anxia)\.com/],
-  ["mobile", /(?:yun\.139\.com|caiyun\.139\.com|caiyun\.feixin\.10086\.cn)/],
+/** host 等于 domain 或是其子域 */
+function hostIs(host: string, domain: string): boolean {
+  return host === domain || host.endsWith("." + domain);
+}
+
+/** 平台 → 分享链接域名（精确匹配 hostname 或其子域，不再对整串 URL 做正则） */
+const PLATFORM_HOSTS: Array<[Platform, string[]]> = [
+  ["aliyun", ["alipan.com", "aliyundrive.com"]],
+  ["quark", ["pan.quark.cn"]],
+  ["uc", ["drive.uc.cn"]],
+  ["baidu", ["pan.baidu.com"]],
+  ["tianyi", ["cloud.189.cn"]],
+  ["123", ["123pan.com", "123pan.cn", "123865.com", "123684.com", "123685.com", "123912.com", "123592.com"]],
+  ["xunlei", ["pan.xunlei.com"]],
+  ["115", ["115.com", "115cdn.com", "anxia.com"]],
+  ["mobile", ["yun.139.com", "caiyun.139.com", "caiyun.feixin.10086.cn"]],
+];
+
+/** 探活实际会请求的域名（分享页 + 各平台 API），httpRequest 的白名单 */
+const ALLOWED_CHECK_HOSTS: string[] = [
+  ...PLATFORM_HOSTS.flatMap(([, hosts]) => hosts),
+  "quark.cn", // drive-h.quark.cn / drive-pc.quark.cn
+  "uc.cn",
+  "xunlei.com", // xluser-ssl / api-pan
+  "189.cn",
+  "139.com", // share-kd-njs.yun.139.com
 ];
 
 export function detectPlatform(url: string): Platform {
-  if (/^magnet:|^ed2k:|^thunder:/.test(url)) return "others";
-  for (const [platform, re] of PLATFORM_MATCH) {
-    if (re.test(url)) return platform;
+  let u: URL;
+  try {
+    u = new URL((url || "").trim());
+  } catch {
+    return "others";
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return "others";
+  if (u.username || u.password || u.port) return "others";
+  const host = u.hostname.toLowerCase();
+  for (const [platform, domains] of PLATFORM_HOSTS) {
+    if (domains.some((d) => hostIs(host, d))) return platform;
   }
   return "others";
+}
+
+/** UC：只请求按 share id 重建的规范地址，不请求用户提供的原始 URL */
+export function buildUCCheckUrl(rawURL: string): string {
+  try {
+    const u = new URL(rawURL);
+    if (!hostIs(u.hostname.toLowerCase(), "drive.uc.cn")) return "";
+    const m = u.pathname.match(/^\/s\/([A-Za-z0-9_-]+)/);
+    if (!m) return "";
+    return `https://drive.uc.cn/s/${m[1]}`;
+  } catch {
+    return "";
+  }
 }
 
 // ========== 各平台状态判定（纯函数，可单测） ==========
@@ -830,6 +942,7 @@ async function checkQuark(
 }
 
 async function checkUC(url: string): Promise<CheckOutcome> {
+  // url 必须是 buildUCCheckUrl 生成的规范地址
   const resp = await httpRequest(url, {
     headers: h({
       "user-agent":
@@ -978,7 +1091,7 @@ async function check115(
   const resp = await httpRequest(apiURL, {
     headers: h({
       priority: "u=1, i",
-      referer: `https://115cdn.com/s/${shareCode}?password=${password}&`,
+      referer: `https://115cdn.com/s/${encodeURIComponent(shareCode)}?password=${encodeURIComponent(password)}&`,
       "x-requested-with": "XMLHttpRequest",
       "sec-ch-ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
       "sec-ch-ua-mobile": "?0",
@@ -1045,7 +1158,12 @@ async function checkMobile(
 // ========== 主入口 ==========
 
 const inflight = new Map<string, Promise<LinkCheckResult>>();
-const cache = new Map<string, { result: LinkCheckResult; expiresAt: number }>();
+/** 有上限的 LRU 缓存（条目 / 内存双上限），TTL 由 ttlFor 分级 */
+const CACHE_MAX_ENTRIES = 5000;
+const cache = new MemoryCache<LinkCheckResult>({
+  maxSize: CACHE_MAX_ENTRIES,
+  maxMemoryBytes: 8 * 1024 * 1024,
+});
 
 // ========== 平台级熔断（防已断平台反复打满超时） ==========
 
@@ -1115,7 +1233,9 @@ async function doCheck(item: CheckItem): Promise<LinkCheckResult> {
         break;
       }
       case "uc": {
-        outcome = await checkUC(item.url);
+        const ucUrl = buildUCCheckUrl(item.url);
+        if (!ucUrl) return { ...base, status: "uncertain", reason: "无法解析分享地址" };
+        outcome = await checkUC(ucUrl);
         break;
       }
       case "baidu": {
@@ -1123,13 +1243,16 @@ async function doCheck(item: CheckItem): Promise<LinkCheckResult> {
         if (!shareID || !shortURL) {
           return { ...base, status: "uncertain", reason: "无法解析分享地址" };
         }
-        outcome = await checkBaidu(shareID, shortURL, password || item.password || "", item.url);
+        // referer 由解析出的 share id 重建，绝不直接用用户输入（可能含非法 header 字符）
+        const referer = `https://pan.baidu.com/s/${encodeURIComponent(shareID)}`;
+        outcome = await checkBaidu(shareID, shortURL, password || item.password || "", referer);
         break;
       }
       case "tianyi": {
         const { shareCode, password } = extractTianyiShareInfo(item.url, item.password);
         if (!shareCode) return { ...base, status: "uncertain", reason: "无法解析分享地址" };
-        outcome = await checkTianyi(shareCode, password, item.url);
+        const referer = `https://cloud.189.cn/t/${encodeURIComponent(shareCode)}`;
+        outcome = await checkTianyi(shareCode, password, referer);
         break;
       }
       case "123": {
@@ -1159,20 +1282,18 @@ async function doCheck(item: CheckItem): Promise<LinkCheckResult> {
       default:
         outcome = { status: "unsupported" };
     }
-    // 网络层失败（respSummary 生成的"请求失败:..."）触发熔断计数；业务判定（locked/bad/ok）不算
-    if (/^请求失败/.test(outcome.reason || "")) {
+    // 只有请求固定 API 域名时的真实网络失败才计入熔断；业务判定（locked/bad/ok）、
+    // 本地构造失败、被拒绝的跳转都不算（防止攻击者用畸形链接把平台熔断掉）
+    if (outcome.reason === NET_FAIL_REASON) {
       recordCircuitFailure(platform);
-    } else {
+    } else if (outcome.reason !== "请求未发出") {
       recordCircuitSuccess(platform);
     }
     return { ...base, status: outcome.status, reason: outcome.reason };
   } catch (err) {
-    recordCircuitFailure(platform);
-    return {
-      ...base,
-      status: "uncertain",
-      reason: err instanceof Error ? err.message : String(err),
-    };
+    // 代码异常不是平台故障：不计熔断，错误细节只写日志
+    loggers.search.debug("linkChecker 探活异常", { platform, error: errorChain(err) });
+    return { ...base, status: "uncertain", reason: "探活异常" };
   }
 }
 
@@ -1182,29 +1303,40 @@ async function doCheck(item: CheckItem): Promise<LinkCheckResult> {
  */
 export async function checkLink(item: CheckItem): Promise<LinkCheckResult> {
   const platform = detectPlatform(item.url);
+  // 不支持的链接不探活、不进缓存（否则任意垃圾 URL 都能占缓存 24 小时）
+  if (platform === "others") {
+    return {
+      url: item.url,
+      platform,
+      status: "unsupported",
+      reason: "unsupported link type",
+      checkedAt: Date.now(),
+    };
+  }
   const normalized = normalizeShareLink(platform, item.url, item.password);
   const cacheKey = `${platform}:${normalized}`;
 
   const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return { ...cached.result, cacheHit: true };
+  if (cached.hit && cached.value) {
+    return { ...cached.value, cacheHit: true };
   }
   const existing = inflight.get(cacheKey);
   if (existing) return existing;
 
   const p = doCheck(item)
     .then((result) => {
-      cache.set(cacheKey, { result, expiresAt: Date.now() + ttlFor(result.status) });
+      cache.set(cacheKey, result, ttlFor(result.status));
       inflight.delete(cacheKey);
       return result;
     })
     .catch((err) => {
       inflight.delete(cacheKey);
+      loggers.search.debug("linkChecker 未预期异常", { error: errorChain(err) });
       return {
         url: item.url,
         platform,
         status: "uncertain" as const,
-        reason: err instanceof Error ? err.message : String(err),
+        reason: "探活异常",
         checkedAt: Date.now(),
       };
     });
@@ -1255,13 +1387,6 @@ export function _resetCircuits(): void {
 
 const CACHE_CLEAN_INTERVAL_MS = 60 * 60 * 1000;
 
-function pruneExpiredCache(): void {
-  const now = Date.now();
-  for (const [key, entry] of cache) {
-    if (entry.expiresAt <= now) cache.delete(key);
-  }
-}
-
 // unref：不让定时器阻止进程退出（vitest / CLI 场景）
-const cacheTimer = setInterval(pruneExpiredCache, CACHE_CLEAN_INTERVAL_MS);
+const cacheTimer = setInterval(() => cache.forceCleanup(), CACHE_CLEAN_INTERVAL_MS);
 cacheTimer.unref?.();
