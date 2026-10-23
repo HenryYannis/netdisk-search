@@ -1,4 +1,4 @@
-import { BaseAsyncPlugin } from "./manager";
+import { BaseAsyncPlugin, pluginSignal, pluginTimeout } from "./manager";
 import type { SearchResult, Link } from "../types/models";
 import { ofetch } from "ofetch";
 import { extractLinksFromText, getLinkType, cleanHTML } from "./panLink";
@@ -48,10 +48,8 @@ export class YunsoPlugin extends BaseAsyncPlugin {
     keyword: string,
     ext?: Record<string, any>
   ): Promise<SearchResult[]> {
-    const timeout = Math.max(
-      3000,
-      Number((ext as any)?.__plugin_timeout_ms) || 12000
-    );
+    const timeout = pluginTimeout(ext, 12000);
+    const signal = pluginSignal(ext);
     const kw = (keyword || "").trim();
     if (!kw) return [];
 
@@ -66,7 +64,9 @@ export class YunsoPlugin extends BaseAsyncPlugin {
       },
       body: { wd: kw, page: 1 },
       timeout,
-    }).catch(() => undefined);
+      signal,
+    });
+    // 网络/HTTP 错误直接抛出（计入熔断）；code≠0 / 无 data 视为"无结果"
 
     if (!resp || resp.code !== 0 || !resp.data) return [];
     return parseYunsoHtml(resp.data, kw);
