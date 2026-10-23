@@ -3,7 +3,7 @@
     <!-- 页头 -->
     <header class="page-hero">
       <div class="page-hero__content">
-        <div class="badge">小宝网盘搜 热搜日历</div>
+        <div class="badge">小宝网盘搜索引擎 热搜日历</div>
         <h1 class="title">每一天，大家在搜什么</h1>
         <p class="desc">按天记录全网用户的真实搜索词 · 点击日期查看当天全部搜索词 · 点击词条立即搜索</p>
       </div>
@@ -146,7 +146,7 @@
 
     <footer class="page-foot">
       返回
-      <NuxtLink to="/" class="page-foot__link">小宝网盘搜</NuxtLink>
+      <NuxtLink to="/" class="page-foot__link">小宝网盘搜索引擎</NuxtLink>
     </footer>
   </div>
 </template>
@@ -167,8 +167,8 @@ interface DayItem {
 }
 
 useSeoMeta({
-  title: "热搜日历 - 小宝网盘搜每日热搜榜",
-  description: "小宝网盘搜 热搜日历：按天查看全网用户的真实网盘搜索词，每一天的完整榜单。",
+  title: "热搜日历 - 小宝网盘搜索引擎每日热搜榜",
+  description: "小宝网盘搜索引擎 热搜日历：按天查看全网用户的真实网盘搜索词，每一天的完整榜单。",
 });
 
 const days = ref<DayInfo[]>([]);
