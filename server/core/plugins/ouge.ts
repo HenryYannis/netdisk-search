@@ -92,11 +92,8 @@ function parseLinks(fromStr: string, urlStr: string) {
   return links;
 }
 
-const OUGE_BASES = [
-  "https://woog.nxog.eu.org",
-  "https://ouge.nxog.eu.org",
-  "https://api.nxog.eu.org",
-];
+// 2026-10-23：ouge.nxog.eu.org / api.nxog.eu.org 已失效，只保留 woog 镜像
+const OUGE_BASES = ["https://woog.nxog.eu.org"];
 
 export class OugePlugin extends BaseAsyncPlugin {
   constructor() {
@@ -111,7 +108,7 @@ export class OugePlugin extends BaseAsyncPlugin {
     const kw = (keyword || "").trim();
     if (!kw) return [];
 
-    // 多个镜像并发请求：只要有一个镜像正常响应就算源可用；全部失败才抛出（计入熔断）
+    // 镜像并发请求：只要有一个镜像正常响应就算源可用；全部失败才抛出（计入熔断）
     const errors: unknown[] = [];
     const tasks = OUGE_BASES.map((base) =>
       ofetch<ApiResponse>(
