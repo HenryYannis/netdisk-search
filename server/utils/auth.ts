@@ -39,11 +39,11 @@ export function setAuthCookie(event: H3Event, token: string): void {
 }
 
 /**
- * 统一鉴权入口。兼容三套凭证：
+ * 统一鉴权入口。兼容两套凭证（都由 /api/auth/unlock 输对密码后签发）：
  *   1. Web 端 Cookie（panhub_unlock）
- *   2. 小程序 Authorization: Bearer <HMAC token>（已输密码解锁的 MP 用户）
- *   3. 小程序共享密钥（x-panhub-client-secret 匹配 MP_CLIENT_SECRET）—— 上线初期放开，后续收口
+ *   2. Authorization: Bearer <HMAC token>（非浏览器客户端）
  * 任一通过即算已解锁。secret 为空时直接放行（未设置密码门）。
+ * （旧的小程序共享密钥 MP_CLIENT_SECRET 通道已删除：密钥写在客户端包里等于没有密码。）
  */
 export function isUnlocked(event: H3Event, secret: string): boolean {
   if (!secret.trim()) return true;
@@ -51,15 +51,6 @@ export function isUnlocked(event: H3Event, secret: string): boolean {
   const h = getRequestHeader(event, "authorization");
   if (h && h.startsWith("Bearer ")) {
     return verifyAuthToken(h.slice(7), secret);
-  }
-  const mpSecret = process.env.MP_CLIENT_SECRET;
-  if (mpSecret && mpSecret.trim()) {
-    const clientSecret = getRequestHeader(event, "x-panhub-client-secret");
-    if (clientSecret) {
-      const a = Buffer.from(clientSecret);
-      const b = Buffer.from(mpSecret);
-      if (a.length === b.length && timingSafeEqual(a, b)) return true;
-    }
   }
   return false;
 }
