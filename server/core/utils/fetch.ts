@@ -28,10 +28,24 @@ export interface FetchWithRetryOptions {
 }
 
 /**
- * 指数退避延迟
+ * 指数退避延迟（可被 signal 打断）
  */
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Request was cancelled", "AbortError"));
+      return;
+    }
+    const t = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(t);
+      reject(new DOMException("Request was cancelled", "AbortError"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 /**
@@ -82,7 +96,8 @@ export async function fetchWithRetry<T = any>(
     }
 
     try {
-      const result = await fetcher<T>(url);
+      // signal 必须传给底层请求，否则超时/客户端断开后请求仍在后台跑
+      const result = await fetcher<T>(url, signal ? { signal } : {});
       return result;
     } catch (error) {
       lastError = error as Error;
@@ -107,7 +122,7 @@ export async function fetchWithRetry<T = any>(
         ? baseDelay * Math.pow(2, attempt)
         : baseDelay;
 
-      await sleep(delay);
+      await sleep(delay, signal);
     }
   }
 
@@ -143,48 +158,4 @@ export async function safeExecute<T>(
     errorLogger?.error?.("Operation failed", normalizeError(error));
     return fallback;
   }
-}
-
-/**
- * 并行执行多个操作，自动处理错误
- *
- * @param operations 异步操作函数数组
- * @param fallback 失败时的默认值
- * @param logger 日志记录器
- * @returns 所有操作的结果数组（包含失败的默认值）
- *
- * @example
- * ```typescript
- * const results = await safeExecuteAll([
- *   () => fetchWithRetry('https://api1.example.com/data'),
- *   () => fetchWithRetry('https://api2.example.com/data'),
- * ], [], logger);
- * ```
- */
-export async function safeExecuteAll<T>(
-  operations: Array<() => Promise<T>>,
-  fallback: T,
-  logger?: { error?: (message: string, error: Error) => void }
-): Promise<T[]> {
-  const promises = operations.map((op) => safeExecute(op, fallback, logger));
-  return Promise.all(promises);
-}
-
-/**
- * 带连接复用的 fetch 创建器
- * 适用于需要多次请求同一域名的场景
- */
-export function createPersistentFetcher(
-  options: FetchWithRetryOptions = {}
-): $Fetch {
-  const { timeout = 8000 } = options;
-
-  return ofetch.create({
-    timeout,
-    headers: {
-      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    },
-    // 注意：ofetch 在 Node.js 环境下会自动复用连接
-    // 如果需要更精细的控制，可以在这里添加 agent 配置
-  });
 }
