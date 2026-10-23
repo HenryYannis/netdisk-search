@@ -1,4 +1,4 @@
-import { BaseAsyncPlugin } from "./manager";
+import { BaseAsyncPlugin, pluginSignal, pluginTimeout } from "./manager";
 import type { SearchResult, Link } from "../types/models";
 import { ofetch } from "ofetch";
 import { extractLinksFromText } from "./panLink";
@@ -63,10 +63,8 @@ export class Quark4kPlugin extends BaseAsyncPlugin {
     keyword: string,
     ext?: Record<string, any>
   ): Promise<SearchResult[]> {
-    const timeout = Math.max(
-      3000,
-      Number((ext as any)?.__plugin_timeout_ms) || 12000
-    );
+    const timeout = pluginTimeout(ext, 12000);
+    const signal = pluginSignal(ext);
     const kw = (keyword || "").trim();
     if (!kw) return [];
 
@@ -82,7 +80,8 @@ export class Quark4kPlugin extends BaseAsyncPlugin {
         Accept: "application/json, text/plain, */*",
       },
       timeout,
-    }).catch(() => undefined);
+      signal,
+    });
 
     const discussions = resp?.data;
     if (!Array.isArray(discussions) || discussions.length === 0) return [];
@@ -118,7 +117,8 @@ export class Quark4kPlugin extends BaseAsyncPlugin {
       });
 
       const dt = disc.attributes?.createdAt;
-      const datetime = dt ? new Date(dt).toISOString() : "";
+      const t = dt ? new Date(dt).getTime() : NaN;
+      const datetime = Number.isFinite(t) ? new Date(t).toISOString() : "";
       out.push({
         message_id: "",
         unique_id: `quark4k-${disc.id}`,
