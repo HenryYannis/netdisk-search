@@ -90,6 +90,18 @@ export function useSettings(): UseSettingsReturn {
         ALL_PLUGIN_NAMES.includes(name as any)
       );
 
+      // 剔除已从配置下线的 TG 频道：老用户 localStorage 里可能还存着失效频道，
+      // 不清理的话前端会继续按 2 个一批发出大量空请求（服务端白名单会丢弃它们）。
+      // 若存的频道全部失效，则回退到当前默认频道。
+      const knownChannels = new Set<string>(
+        defaultTgChannels.value?.length ? defaultTgChannels.value : channelsConfig.defaultChannels
+      );
+      const storedTg = validated.enabledTgChannels;
+      validated.enabledTgChannels = storedTg.filter((c) => knownChannels.has(c));
+      if (storedTg.length > 0 && validated.enabledTgChannels.length === 0) {
+        validated.enabledTgChannels = [...knownChannels];
+      }
+
       if (
         validated.enabledPlugins.length === 0 &&
         validated.enabledTgChannels.length === 0
