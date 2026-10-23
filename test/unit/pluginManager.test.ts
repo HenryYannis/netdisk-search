@@ -59,12 +59,10 @@ describe("BaseAsyncPlugin", () => {
     expect(plugin.priority()).toBe(3);
   });
 
-  it("应该正确设置缓存键和关键词", () => {
-    const plugin = new TestPlugin1();
-    plugin.setMainCacheKey("cache-key");
-    plugin.setCurrentKeyword("test-keyword");
-    expect(plugin["mainCacheKey"]).toBe("cache-key");
-    expect(plugin["currentKeyword"]).toBe("test-keyword");
+  it("单例插件不再暴露可变的 per-request 状态（setMainCacheKey 等已删除）", () => {
+    const plugin = new TestPlugin1() as any;
+    expect(plugin.setMainCacheKey).toBeUndefined();
+    expect(plugin.setCurrentKeyword).toBeUndefined();
   });
 
   it("默认应该不跳过服务过滤", () => {
@@ -142,8 +140,6 @@ describe("Global Plugin Registry", () => {
       name: () => "",
       priority: () => 1,
       search: async () => [],
-      setMainCacheKey: () => {},
-      setCurrentKeyword: () => {},
       skipServiceFilter: () => false,
     };
     registerGlobalPlugin(invalidPlugin as any);
