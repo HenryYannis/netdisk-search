@@ -1,4 +1,4 @@
-import { load } from "cheerio";
+import { load, type CheerioAPI } from "cheerio";
 import { ofetch } from "ofetch";
 import type { SearchResult } from "../types/models";
 import { matchesSearchKeyword } from "../utils/searchKeyword";
@@ -81,8 +81,15 @@ export async function fetchTgChannelPosts(
   return allResults;
 }
 
+/** 非法日期返回 ""（new Date("bad").toISOString() 会抛 RangeError，丢掉整页结果） */
+function safeIso(value: string): string {
+  if (!value) return "";
+  const t = new Date(value).getTime();
+  return Number.isFinite(t) ? new Date(t).toISOString() : "";
+}
+
 export function parseChannelPage(
-  $: cheerio.CheerioAPI,
+  $: CheerioAPI,
   channel: string,
   keyword: string,
   limit: number,
@@ -172,7 +179,29 @@ export function parseChannelPage(
       return null;
     };
 
-    const addUrl = (raw: string) => {
+    // 提取码按"离链接最近"取：先看 URL 自带的 ?pwd=，再看正文里紧跟该链接之后、
+    // 下一个链接之前的那段文字。避免一条消息里百度的提取码被套到夸克/阿里链接上。
+    const findPasswordNear = (resolvedUrl: string, needles: string[]): string => {
+      try {
+        const p = new URL(resolvedUrl).searchParams.get("pwd");
+        if (p && /^[a-zA-Z0-9]{3,8}$/.test(p)) return p;
+      } catch {
+        /* ignore */
+      }
+      for (const needle of needles) {
+        if (!needle) continue;
+        const idx = text.indexOf(needle);
+        if (idx < 0) continue;
+        const after = text.slice(idx + needle.length);
+        const next = after.search(/https?:\/\/|magnet:\?/);
+        const seg = (next >= 0 ? after.slice(0, next) : after).slice(0, 80);
+        const m = seg.match(passwdPattern);
+        if (m?.[1]) return m[1];
+      }
+      return "";
+    };
+
+    const addUrl = (raw: string, extraNeedles: string[] = []) => {
       const resolved = resolveUrl(raw);
       if (!resolved) return;
 
@@ -180,8 +209,7 @@ export function parseChannelPage(
       if (seenUrls.has(key)) return;
       seenUrls.add(key);
 
-      const m = text.match(passwdPattern);
-      const password = m ? m[1] : "";
+      const password = findPasswordNear(resolved.url, [raw, resolved.url, ...extraNeedles]);
       links.push({ type: resolved.type, url: resolved.url, password });
     };
 
@@ -190,8 +218,15 @@ export function parseChannelPage(
 
     root.find(".tgme_widget_message_text a[href]").each((_, a) => {
       const href = $(a).attr("href");
-      if (href) addUrl(href);
+      if (href) addUrl(href, [$(a).text().trim()]);
     });
+
+    // 只有一个链接时，消息里的提取码只可能属于它（兼容"提取码写在链接前面"的格式）
+    const onlyLink = links.length === 1 ? links[0] : undefined;
+    if (onlyLink && !onlyLink.password) {
+      const m = text.match(passwdPattern);
+      if (m?.[1]) onlyLink.password = m[1];
+    }
 
     let title = firstLine;
     for (const link of links) {
@@ -229,7 +264,7 @@ export function parseChannelPage(
       message_id: postId,
       unique_id: `tg-${channel}-${postId || startIndex + i}`,
       channel,
-      datetime: dateTitle ? new Date(dateTitle).toISOString() : "",
+      datetime: safeIso(dateTitle),
       title,
       content,
       links,
