@@ -1,5 +1,5 @@
 <template>
-  <div class="douban-section">
+  <div ref="rootRef" class="douban-section">
     <!-- 分类 Tabs - 始终可点击 -->
     <nav class="category-nav" role="tablist">
       <button
@@ -78,26 +78,11 @@
         </div>
       </transition>
 
-      <!-- 加载更多 -->
-      <div v-if="items.length > 0" class="load-section">
-        <div
-          v-if="hasMore || loadingMore"
-          ref="loadTriggerRef"
-          class="load-trigger"
-        >
-          <div v-if="loadingMore" class="loading-more">
-            <div class="spinner-dots">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <span>加载更多…</span>
-          </div>
-        </div>
-
-        <div v-else-if="items.length > 0" class="end-message">
-          — 已经到底了 —
-        </div>
+      <!-- 翻页 -->
+      <div v-if="items.length > 0 && (currentPage > 1 || hasMore)" class="pager">
+        <button class="pager-btn" type="button" :disabled="currentPage <= 1 || loading" @click="goPage(currentPage - 1)">← 上一页</button>
+        <span class="pager-info">第 {{ currentPage }} 页</span>
+        <button class="pager-btn" type="button" :disabled="!hasMore || loading" @click="goPage(currentPage + 1)">下一页 →</button>
       </div>
 
       <!-- 空状态 -->
@@ -110,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onBeforeUnmount, nextTick } from "vue";
+import { ref, computed, nextTick } from "vue";
 
 interface Props {
   onSearch: (term: string) => void;
@@ -134,8 +119,6 @@ const hasMore = ref(true);
 const imgFailed = ref<number[]>([]);
 const selectedCategoryId = ref<string>("douban-top250");
 const currentPage = ref(1);
-const loadObserver = ref<IntersectionObserver | null>(null);
-const loadTriggerRef = ref<HTMLElement | null>(null);
 
 // 防止快速切换分类时旧响应覆盖新数据
 let fetchSeq = 0;
@@ -232,44 +215,17 @@ async function selectCategory(categoryId: string) {
 
   // 开始获取新数据
   await fetchCategoryData(categoryId, 1, false);
+}
+
+const rootRef = ref<HTMLElement | null>(null);
+
+async function goPage(page: number) {
+  if (page < 1 || loading.value) return;
+  items.value = [];
+  loading.value = true;
+  await fetchCategoryData(selectedCategoryId.value, page, false);
   await nextTick();
-  setupLoadMoreObserver();
-}
-
-async function loadMore() {
-  if (loadingMore.value || !hasMore.value) return;
-  await fetchCategoryData(selectedCategoryId.value, currentPage.value + 1, true);
-}
-
-function setupLoadMoreObserver() {
-  if (loadObserver.value) {
-    loadObserver.value.disconnect();
-  }
-
-  nextTick(() => {
-    const target = loadTriggerRef.value;
-    if (!target) return;
-
-    // 检测是否为移动设备
-    const isMobile = window.innerWidth < 640;
-
-    loadObserver.value = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMore.value && !loading.value && !loadingMore.value) {
-          loadMore();
-        }
-      },
-      {
-        root: null,
-        // 移动端使用更大的 rootMargin 以提前触发加载
-        rootMargin: isMobile ? "200px" : "150px",
-        // 移动端使用更低的 threshold，PC端使用标准的 0.1
-        threshold: isMobile ? 0.01 : 0.1,
-      }
-    );
-
-    loadObserver.value.observe(target);
-  });
+  rootRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 // Transition hooks
@@ -301,8 +257,6 @@ function onItemClick(title: string) {
 
 async function init() {
   await fetchCategoryData(selectedCategoryId.value, 1, false);
-  await nextTick();
-  setupLoadMoreObserver();
 }
 
 async function refresh() {
@@ -311,11 +265,6 @@ async function refresh() {
   await fetchCategoryData(selectedCategoryId.value, 1, false);
 }
 
-onBeforeUnmount(() => {
-  if (loadObserver.value) {
-    loadObserver.value.disconnect();
-  }
-});
 
 defineExpose({ init, refresh });
 </script>
@@ -356,7 +305,7 @@ defineExpose({ init, refresh });
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(15, 118, 110, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
+  background: rgba(15, 118, 110, 0.1);
   opacity: 0;
   transition: opacity 0.2s ease;
 }
@@ -514,7 +463,7 @@ defineExpose({ init, refresh });
 
 .card-cover {
   aspect-ratio: 2 / 3;
-  background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%);
+  background: #e5e7eb;
   overflow: hidden;
   position: relative;
 }
@@ -755,5 +704,37 @@ defineExpose({ init, refresh });
   .spinner-dots span {
     animation: none;
   }
+}
+
+/* 翻页 */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 0 8px;
+}
+.pager-btn {
+  padding: 8px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+.pager-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.pager-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pager-info {
+  font-size: 14px;
+  color: var(--text-secondary);
 }
 </style>
