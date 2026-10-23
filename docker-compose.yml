@@ -6,7 +6,10 @@ services:
     container_name: panhub
     restart: unless-stopped
     ports:
-      - "4000:4000"
+      # 只绑定本机回环：由 Cloudflare Tunnel / 反向代理转发到 127.0.0.1:4000。
+      # TRUST_PROXY=1 会信任 CF-Connecting-IP 头，若端口直接暴露公网，
+      # 任何人都能伪造该头绕过限流——不要改成 "4000:4000"。
+      - "127.0.0.1:4000:4000"
     volumes:
       # 持久化热搜 JSON 数据
       - ./data:/app/data
