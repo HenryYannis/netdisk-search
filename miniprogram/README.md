@@ -13,7 +13,7 @@ miniprogram/
 │   ├── index/                      搜索首页
 │   └── settings/                   设置
 └── utils/
-    ├── api.js                      wx.request 封装（自动带 MP_CLIENT_SECRET）
+    ├── api.js                      wx.request 封装
     ├── merge.js                    require ../../../shared/merge.js
     └── extract.js                  require ../../../shared/extract.js
 ```
@@ -44,7 +44,7 @@ MP 端采用**前端扇出**（与 Web 端同源语义）—— `api.search(keyw
 
 后端改造点（已在 `server/utils/auth.ts` 里完成）：
 - 响应 `/api/auth/unlock` 返回 `{ ok, token }`（HMAC token，不返回明文密码）
-- `isUnlocked` 同时兼容：Web Cookie / MP Bearer / MP `x-panhub-client-secret` 共享密钥（初期免密）
+- `isUnlocked` 兼容：Web Cookie / Bearer token（需先 POST /api/auth/unlock 输对密码）。`x-panhub-client-secret` 共享密钥通道已于 2026-10-23 删除
 
 ## 小程序鉴权（解锁流程）
 
