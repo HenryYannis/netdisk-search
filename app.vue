@@ -4,7 +4,7 @@
     <header class="header">
       <nav class="nav">
         <NuxtLink to="/" class="brand">
-          <span class="brand-icon">🔍</span>
+          <img class="brand-icon" src="/favicon.svg" alt="" width="28" height="28" />
           <span class="brand-text">小宝网盘搜索引擎</span>
         </NuxtLink>
 
@@ -45,15 +45,6 @@
       </nav>
     </header>
 
-    <!-- 公告条（全站导航栏下方；关闭后不再显示，改公告内容时升级 key 版本号重新展示） -->
-    <div v-if="showAnnouncement" class="announce-bar" role="status">
-      <span class="announce-bar__text">
-        📢 为节省服务器资源，默认搜索 <strong>50 条</strong>结果即自动暂停；
-        如需更多结果，点击「继续」即可继续搜索
-      </span>
-      <button class="announce-bar__close" type="button" @click="dismissAnnouncement" aria-label="关闭公告" title="关闭">✕</button>
-    </div>
-
     <!-- 主内容区 -->
     <main class="main">
       <NuxtPage />
@@ -62,6 +53,12 @@
     <!-- 页脚 -->
     <footer class="site-footer">
       <div class="site-footer__inner">
+        <section class="site-footer__about" aria-label="关于本站">
+          <h2 class="site-footer__about-title">小宝网盘搜索引擎 · 网盘资源聚合搜索</h2>
+          <p class="site-footer__about-text">
+            小宝网盘搜索引擎是一个免费的网盘搜索引擎，一键检索全网网盘资源。支持夸克网盘搜索、阿里云盘搜索、百度网盘资源搜索，以及 115、迅雷云盘等平台的公开分享链接，电影、剧集、动漫、软件、学习资料都能找：实时聚合、多平台覆盖、结果去重，快速直达、少打扰。
+          </p>
+        </section>
         <p class="site-footer__disclaimer">
           <strong>免责声明：</strong>本站仅为网盘资源的搜索引擎，所有结果均由程序自动抓取自互联网公开分享的链接，本站不存储、不上传、不制作任何文件，也不对第三方内容的合法性、准确性和安全性负责。
           请在下载后 24 小时内删除，仅供个人学习交流使用，严禁用于商业或违法用途；请支持正版。
@@ -167,24 +164,8 @@ onMounted(() => {
   initDarkMode();
   loadSettings();
   auth.fetchStatus();
-  checkAnnouncement();
 });
 
-// 公告条（v1：搜索上限 50 自动暂停。改公告内容时升级 key 版本号，让已关闭用户重新看到）
-const ANNOUNCEMENT_KEY = "panhub:announcement-dismissed:v1";
-const showAnnouncement = ref(false);
-function checkAnnouncement() {
-  try {
-    if (localStorage.getItem(ANNOUNCEMENT_KEY)) return;
-  } catch {}
-  showAnnouncement.value = true;
-}
-function dismissAnnouncement() {
-  showAnnouncement.value = false;
-  try {
-    localStorage.setItem(ANNOUNCEMENT_KEY, "1");
-  } catch {}
-}
 </script>
 
 <style>
@@ -241,8 +222,10 @@ function dismissAnnouncement() {
 }
 
 .brand-icon {
-  font-size: 24px;
-  filter: drop-shadow(0 2px 4px rgba(15, 118, 110, 0.3));
+  width: 28px;
+  height: 28px;
+  display: block;
+  flex-shrink: 0;
 }
 
 .brand-text {
@@ -305,6 +288,19 @@ function dismissAnnouncement() {
   margin: 0 auto;
   padding: 28px 24px 32px;
   text-align: center;
+}
+.site-footer__about { margin-bottom: 12px; }
+.site-footer__about-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.site-footer__about-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
 }
 .site-footer__disclaimer {
   margin: 0 auto 16px;
@@ -482,48 +478,4 @@ function dismissAnnouncement() {
   }
 }
 
-/* 公告条（全宽细条，导航栏下方） */
-.announce-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 16px;
-  background: rgba(15, 118, 110, 0.08);
-  border-bottom: 1px solid rgba(15, 118, 110, 0.12);
-  font-size: 13px;
-  color: var(--text-secondary, #4b5563);
-  line-height: 1.5;
-  animation: barSlideIn 0.3s ease;
-}
-.announce-bar__text {
-  text-align: center;
-}
-.announce-bar__text strong {
-  color: var(--primary, #0f766e);
-}
-.announce-bar__close {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  font-size: 14px;
-  color: var(--text-tertiary, #9ca3af);
-  cursor: pointer;
-  padding: 0 4px;
-  line-height: 1;
-}
-.announce-bar__close:hover {
-  color: var(--text-secondary, #4b5563);
-}
-@keyframes barSlideIn {
-  from {
-    transform: translateY(-4px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
 </style>
