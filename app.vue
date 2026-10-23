@@ -1,12 +1,5 @@
 <template>
   <div class="layout">
-    <!-- 背景装饰 -->
-    <div class="bg-decoration">
-      <div class="blob blob-1"></div>
-      <div class="blob blob-2"></div>
-      <div class="blob blob-3"></div>
-    </div>
-
     <!-- 顶部导航 -->
     <header class="header">
       <nav class="nav">
@@ -15,10 +8,10 @@
           <span class="brand-text">小宝网盘搜</span>
         </NuxtLink>
 
-        <div class="site-links">
-          <a href="https://xbkjz.cn/" target="_blank" rel="noopener"><span class="full">小宝</span>科技站</a>
-          <a href="https://xbmlz.cn/" target="_blank" rel="noopener"><span class="full">小宝</span>命理站</a>
-          <a href="https://xbyxz.cn/" target="_blank" rel="noopener"><span class="full">小宝</span>游戏站</a>
+        <div class="site-links" aria-label="小宝的其他网站">
+          <a href="https://xbkjz.cn/" target="_blank" rel="noopener">科技站</a>
+          <a href="https://xbmlz.cn/" target="_blank" rel="noopener">命理站</a>
+          <a href="https://xbyxz.cn/" target="_blank" rel="noopener">游戏站</a>
         </div>
 
         <div class="nav-actions">
@@ -65,6 +58,24 @@
     <main class="main">
       <NuxtPage />
     </main>
+
+    <!-- 页脚 -->
+    <footer class="site-footer">
+      <div class="site-footer__inner">
+        <p class="site-footer__disclaimer">
+          <strong>免责声明：</strong>本站仅为网盘资源的搜索引擎，所有结果均由程序自动抓取自互联网公开分享的链接，本站不存储、不上传、不制作任何文件，也不对第三方内容的合法性、准确性和安全性负责。
+          请在下载后 24 小时内删除，仅供个人学习交流使用，严禁用于商业或违法用途；请支持正版。
+          如果您是权利人，认为某条结果侵犯了您的权益，请通过下方任一站点联系我们，我们会在核实后尽快屏蔽。
+        </p>
+        <nav class="site-footer__links" aria-label="页脚导航">
+          <a href="https://xbkjz.icu/" target="_blank" rel="noopener">小宝导航</a>
+          <a href="https://xbkjz.cn/" target="_blank" rel="noopener">科技站</a>
+          <a href="https://xbmlz.cn/" target="_blank" rel="noopener">命理站</a>
+          <a href="https://xbyxz.cn/" target="_blank" rel="noopener">游戏站</a>
+        </nav>
+        <p class="site-footer__copy">© {{ new Date().getFullYear() }} 小宝网盘搜 · 基于开源项目 PanHub（MIT）</p>
+      </div>
+    </footer>
 
     <!-- 设置抽屉 -->
     <ClientOnly>
@@ -191,53 +202,6 @@ function dismissAnnouncement() {
   overflow-y: auto;
 }
 
-/* 背景装饰 - 玻璃拟态效果 */
-.bg-decoration {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: -1;
-  overflow: hidden;
-}
-
-.blob {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(48px);
-  opacity: 0.28;
-  animation: blobFloat 8s ease-in-out infinite;
-}
-
-.blob-1 {
-  width: 400px;
-  height: 400px;
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
-  top: -100px;
-  left: -100px;
-  animation-delay: 0s;
-}
-
-.blob-2 {
-  width: 300px;
-  height: 300px;
-  background: linear-gradient(135deg, #f59e0b, #fb7185);
-  bottom: -50px;
-  right: -50px;
-  animation-delay: 2s;
-}
-
-.blob-3 {
-  width: 250px;
-  height: 250px;
-  background: linear-gradient(135deg, #0ea5e9, #14b8a6);
-  top: 50%;
-  left: 70%;
-  animation-delay: 4s;
-}
-
 /* 顶部导航 - 玻璃拟态 */
 .header {
   background: var(--bg-glass);
@@ -282,7 +246,7 @@ function dismissAnnouncement() {
 }
 
 .brand-text {
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  background: var(--primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -292,33 +256,82 @@ function dismissAnnouncement() {
 .site-links {
   flex: 1;
   display: flex;
-  justify-content: center;
-  gap: 4px;
+  align-items: center;
+  gap: 28px;
+  margin-left: 12px;
+  padding-left: 24px;
+  border-left: 1px solid var(--border-light);
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.site-links::-webkit-scrollbar { display: none; }
 .site-links a {
+  position: relative;
   white-space: nowrap;
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
-  color: var(--text-secondary, var(--text-primary));
+  padding: 6px 0;
+  color: var(--text-secondary);
   text-decoration: none;
-  font-size: 14px;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: color var(--transition-fast);
 }
-.site-links a:hover {
-  background: var(--bg-btn);
-  color: var(--primary);
+.site-links a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--primary);
+  transform: scaleX(0);
+  transition: transform var(--transition-fast);
 }
-@media (max-width: 900px) {
-  .site-links a { padding: 6px 8px; font-size: 13px; }
-  .site-links .full { display: none; }
+.site-links a:hover { color: var(--primary); }
+.site-links a:hover::after { transform: scaleX(1); }
+@media (max-width: 640px) {
+  .nav { flex-wrap: wrap; row-gap: 6px; }
+  .site-links { order: 3; flex-basis: 100%; margin-left: 0; padding-left: 0; border-left: none; gap: 0; justify-content: space-around; }
+  .site-links a { font-size: 14px; }
 }
-@media (max-width: 520px) {
-  .nav { flex-wrap: wrap; row-gap: 8px; }
-  .site-links { order: 3; flex-basis: 100%; justify-content: space-between; }
+
+/* 页脚 */
+.site-footer {
+  margin-top: auto;
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+}
+.site-footer__inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 24px 32px;
+  text-align: center;
+}
+.site-footer__disclaimer {
+  margin: 0 auto 16px;
+  max-width: 860px;
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--text-tertiary);
+}
+.site-footer__disclaimer strong { color: var(--text-secondary); }
+.site-footer__links {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin-bottom: 10px;
+}
+.site-footer__links a {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+.site-footer__links a:hover { color: var(--primary); }
+.site-footer__copy {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 /* 导航操作区 */
@@ -477,7 +490,7 @@ function dismissAnnouncement() {
   gap: 8px;
   width: 100%;
   padding: 7px 16px;
-  background: linear-gradient(90deg, rgba(15, 118, 110, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%);
+  background: rgba(15, 118, 110, 0.08);
   border-bottom: 1px solid rgba(15, 118, 110, 0.12);
   font-size: 13px;
   color: var(--text-secondary, #4b5563);
