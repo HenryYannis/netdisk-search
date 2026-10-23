@@ -24,9 +24,11 @@ export default defineEventHandler(async (event) => {
       },
     };
   } catch (error: any) {
+    // 上游错误细节只写日志，不回给客户端
+    console.warn("[douban-hot] failed:", error?.message);
     throw createError({
       statusCode: 502,
-      message: `获取豆瓣榜单失败: ${error?.message || "upstream error"}`,
+      message: "获取豆瓣榜单失败",
     });
   }
 });
