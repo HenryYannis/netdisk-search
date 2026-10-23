@@ -54,19 +54,23 @@ export default defineNuxtConfig({
     },
   },
   routeRules: {
+    // 注意：不要再加全局 "/**": { swr } —— Nitro 默认用进程内存存路由缓存，键含完整
+    // URL（含 query），/?q=<随机> 之类请求会无限堆积 SSR HTML 直到容器 OOM，
+    // 还会把 /api/health 缓存成 200 让健康检查失效。页面 SSR 很便宜，直接实时渲染。
+    // 健康检查必须实时
+    "/api/health": { cache: false },
     // 热搜接口不缓存，否则 POST 写入后 GET 仍返回旧数据
-    "/api/hot-searches": { swr: false, cache: false },
-    // 豆瓣热搜允许短时缓存（服务端已有 60 分钟 cache）
-    "/api/douban-hot": { swr: false, cache: false },
-    // 密码门接口不缓存，确保 POST body 正常处理
-    "/api/auth/**": { swr: false, cache: false },
+    "/api/hot-searches": { cache: false },
+    "/api/douban-hot": { cache: false },
+    "/api/auth/**": { cache: false },
     // 搜索接口依赖 Cookie 鉴权，禁止缓存避免 401 被缓存
-    "/api/search": { swr: false, cache: false },
-    // 链接检测接口需要读 POST body，禁止缓存避免 body 被中间件消费
-    "/api/check": { swr: false, cache: false },
-    // 图片代理依赖豆瓣，禁止 SWR 缓存避免错误响应被缓存
-    "/api/img": { swr: false, cache: false },
-    "/**": { swr: 3600 },
+    "/api/search": { cache: false },
+    "/api/check": { cache: false },
+    "/api/img": { cache: false },
+    // 构建产物文件名带内容 hash，可长期强缓存（浏览器 + Cloudflare）
+    "/_nuxt/**": {
+      headers: { "cache-control": "public, max-age=31536000, immutable" },
+    },
   },
   runtimeConfig: {
     // server-only 配置
