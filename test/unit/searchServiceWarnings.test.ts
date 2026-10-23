@@ -54,7 +54,9 @@ class HangingPlugin extends BaseAsyncPlugin {
 }
 
 class FallbackPlugin extends BaseAsyncPlugin {
+  queried: string[] = [];
   async search(keyword: string): Promise<SearchResult[]> {
+    this.queried.push(keyword);
     if (keyword === "movie") {
       return [
         {
@@ -248,8 +250,9 @@ describe("SearchService warnings", () => {
     expect(status?.failureCount).toBe(0);
   });
 
-  it("does not count a successful fallback search as a plugin failure", async () => {
-    const service = createService(new FallbackPlugin("fallback", 1));
+  it("one-character keywords search only themselves (no unrelated 电影/movie fallback)", async () => {
+    const plugin = new FallbackPlugin("fallback", 1);
+    const service = createService(plugin);
 
     const result = await service.searchWithWarnings(
       "a",
@@ -263,12 +266,89 @@ describe("SearchService warnings", () => {
       {}
     );
 
-    expect(result.response.total).toBe(1);
-
+    expect(plugin.queried).toEqual(["a"]);
+    expect(result.response.total).toBe(0);
     const status = service.getPluginHealthStatus().find((item) => item.name === "fallback");
-    expect(status?.isHealthy).toBe(true);
     expect(status?.failureCount).toBe(0);
     expect(status?.successCount).toBe(1);
+  });
+
+  it("counts a plugin timeout as a failure and reports a warning", async () => {
+    const plugin = new HangingPlugin("hanging", 1);
+    const service = createService(plugin);
+
+    vi.useFakeTimers();
+    try {
+      const pending = service.searchWithWarnings(
+        "test",
+        [],
+        1,
+        false,
+        "merged_by_type",
+        "plugin",
+        ["hanging"],
+        undefined,
+        {}
+      );
+      await vi.advanceTimersByTimeAsync(3500);
+      const { warnings } = await pending;
+      expect(warnings.length).toBeGreaterThan(0);
+      const status = service.getPluginHealthStatus().find((item) => item.name === "hanging");
+      expect(status?.failureCount).toBe(1);
+      expect(status?.successCount ?? 0).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clamps a huge client-supplied timeout to 15s", async () => {
+    const plugin = new HangingPlugin("hanging", 1);
+    const service = createService(plugin);
+
+    vi.useFakeTimers();
+    try {
+      const pending = service.searchWithWarnings(
+        "test",
+        [],
+        1,
+        false,
+        "merged_by_type",
+        "plugin",
+        ["hanging"],
+        undefined,
+        { __plugin_timeout_ms: 1e9 }
+      );
+      await vi.advanceTimersByTimeAsync(15_500);
+      await pending;
+      expect(plugin.receivedSignal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not count a client disconnect as a plugin failure", async () => {
+    const plugin = new HangingPlugin("hanging", 1);
+    const service = createService(plugin);
+    const ac = new AbortController();
+
+    const pending = service.searchWithWarnings(
+      "test",
+      [],
+      1,
+      false,
+      "merged_by_type",
+      "plugin",
+      ["hanging"],
+      undefined,
+      {},
+      ac.signal
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    ac.abort();
+    const { warnings } = await pending;
+    expect(warnings).toEqual([]);
+    const status = service.getPluginHealthStatus().find((item) => item.name === "hanging");
+    expect(status?.failureCount ?? 0).toBe(0);
   });
 
   it("aborts the plugin abort signal when its search exceeds the timeout", async () => {
