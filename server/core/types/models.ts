@@ -13,7 +13,6 @@ export interface SearchResult {
   content: string;
   links: Link[];
   tags?: string[];
-  images?: string[];
 }
 
 export interface MergedLink {
@@ -22,7 +21,6 @@ export interface MergedLink {
   note: string;
   datetime: string; // ISO string
   source?: string; // e.g. "tg:channel" or "plugin:name"
-  images?: string[];
 }
 
 export type MergedLinks = Record<string, MergedLink[]>;
