@@ -76,13 +76,13 @@ describe("getClientIp（防伪造核心）", () => {
     expect(getClientIp(event)).toBe("8.8.8.8");
   });
 
-  it("TRUST_PROXY=1 且无 CF 头时信任 XFF 第一个值", () => {
+  it("TRUST_PROXY=1 也从不信任 XFF（CF 会把真实 IP 追加在客户端伪造值之后）", () => {
     vi.stubEnv("TRUST_PROXY", "1");
     const event = makeEvent({
       remoteAddress: "1.2.3.4",
       headers: { "x-forwarded-for": "9.9.9.9, 7.7.7.7" },
     });
-    expect(getClientIp(event)).toBe("9.9.9.9");
+    expect(getClientIp(event)).toBe("1.2.3.4");
   });
 
   it("TRUST_PROXY=1 但代理头非法时回退 socket", () => {
@@ -206,14 +206,48 @@ describe("createRateLimitMiddleware", () => {
     ).toThrowError(expect.objectContaining({ statusCode: 429 }));
   });
 
-  it("store 超过上限时降级放行（防内存 DoS），不抛错", () => {
+  it("store 满时淘汰最旧条目，而不是对所有人放行", () => {
     const handler = createRateLimitMiddleware({
-      limits: { "/api/search": { limit: 100, windowMs: 60_000 } },
-      maxStoreEntries: 1,
+      limits: { "/api/search": { limit: 1, windowMs: 60_000 } },
+      maxStoreEntries: 2,
     });
-    // 第一个 IP 占满 store
     expect(handler(makeEvent({ remoteAddress: "1.1.1.1" }))).toBeUndefined();
-    // 第二个 IP 触发降级 → 放行（不 OOM、不 429）
     expect(handler(makeEvent({ remoteAddress: "2.2.2.2" }))).toBeUndefined();
+    // 3.3.3.3 进来 → 淘汰最旧的 1.1.1.1
+    expect(handler(makeEvent({ remoteAddress: "3.3.3.3" }))).toBeUndefined();
+    // 仍在 store 中的 IP 继续受限（未降级放行）
+    expect(() => handler(makeEvent({ remoteAddress: "3.3.3.3" }))).toThrowError(
+      expect.objectContaining({ statusCode: 429 })
+    );
+  });
+
+  it("限流键只看 pathname：随机 query 不能绕过", () => {
+    const handler = createRateLimitMiddleware({
+      limits: { "/api/search": { limit: 2, windowMs: 60_000 } },
+    });
+    handler(makeEvent({ path: "/api/search?kw=a&x=1" }));
+    handler(makeEvent({ path: "/api/search?kw=b&x=2" }));
+    expect(() =>
+      handler(makeEvent({ path: "/api/search?kw=c&x=3" }))
+    ).toThrowError(expect.objectContaining({ statusCode: 429 }));
+  });
+
+  it("带 query 的 /api/health 仍豁免", () => {
+    const handler = createRateLimitMiddleware({
+      limits: { "/api/search": { limit: 1, windowMs: 60_000 } },
+      defaultLimit: { limit: 1, windowMs: 60_000 },
+    });
+    for (let i = 0; i < 3; i++) {
+      expect(handler(makeEvent({ path: "/api/health?x=" + i }))).toBeUndefined();
+    }
+  });
+
+  it("默认配置：一次完整搜索（~42 请求）连搜 5 次不被拦", () => {
+    const handler = createRateLimitMiddleware();
+    for (let i = 0; i < 5 * 42; i++) {
+      expect(
+        handler(makeEvent({ path: `/api/search?kw=k${i % 5}&channels=c${i}` }))
+      ).toBeUndefined();
+    }
   });
 });
