@@ -19,7 +19,7 @@
           <a href="https://xbkjz.cn/" target="_blank" rel="noopener"><span class="full">小宝</span>科技站</a>
           <a href="https://xbmlz.cn/" target="_blank" rel="noopener"><span class="full">小宝</span>命理站</a>
           <a href="https://xbyxz.cn/" target="_blank" rel="noopener"><span class="full">小宝</span>游戏站</a>
-          <a href="https://paygame.xbkjz.icu/" target="_blank" rel="noopener"><span class="full">少年</span>作品墙</a>
+          <a href="https://pygame.xbkjz.icu/" target="_blank" rel="noopener"><span class="full">少年</span>作品墙</a>
         </div>
 
         <div class="nav-actions">
