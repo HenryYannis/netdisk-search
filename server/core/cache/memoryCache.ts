@@ -67,7 +67,15 @@ export class MemoryCache<T = unknown> {
       if (depth > 4) return 128;
       if (Array.isArray(value)) {
         if (value.length === 0) return 16;
-        return value.length * this.estimateAny(value[0], depth + 1) + 16;
+        // 抽样多个元素取平均（旧实现只看第一个元素，元素大小差异大时严重低估）
+        const sample = Math.min(value.length, 32);
+        const step = value.length / sample;
+        let sum = 0;
+        for (let i = 0; i < sample; i++) {
+          sum += this.estimateAny(value[Math.floor(i * step)], depth + 1);
+        }
+        // ×1.5：V8 对象头 / 隐藏类 / 字符串对齐等开销，宁可高估
+        return Math.ceil((sum / sample) * value.length * 1.5) + 16;
       }
       let total = 16;
       for (const key in value as Record<string, unknown>) {
