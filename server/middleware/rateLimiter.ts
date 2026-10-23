@@ -1,19 +1,16 @@
-import { defineEventHandler, getHeader, createError, setHeader } from "h3";
-import { isIP } from "node:net";
+import { defineEventHandler, createError, setHeader } from "h3";
+import { getClientIp, isValidIp, normalizeIp } from "../utils/clientIp";
 
 /**
  * 全局限流中间件（IP 级，固定窗口）
  *
- * 第一性原理：限流必须建立在"攻击者不可伪造的客户端标识"之上。
- * 因此客户端 IP 的获取遵循以下优先级：
- *   1. event.context.clientAddress —— 平台注入（CF Workers 等），完全可信
- *   2. CF-Connecting-IP / X-Forwarded-For —— 仅当显式设置 TRUST_PROXY=1
- *      （前置了 CF/可信反代，它们会覆盖用户伪造的头，此时可信）
- *   3. socket remoteAddress —— 默认路径（Docker 直连），攻击者无法伪造
- *
- * 默认不信任任何代理头：若直接信任 X-Forwarded-For，攻击者每请求换一个
- * 伪 IP 头即可完全绕过限流，等于没有限流。
+ * - 客户端 IP：见 server/utils/clientIp.ts（CF-Connecting-IP，需 TRUST_PROXY=1；否则 socket 地址）
+ * - 限流键 = IP + pathname（**不含 query**）：否则每个带不同 query 的请求都是新键，
+ *   限流形同虚设，且长 query 会把 store 撑大
+ * - store 有上限；满了淘汰最旧条目（而不是对所有人放行）
  */
+
+export { getClientIp, isValidIp, normalizeIp };
 
 interface RateLimitEntry {
   count: number;
@@ -28,53 +25,27 @@ export interface RateLimitConfig {
 
 // 路径 → { limit, windowMs }
 const RATE_LIMITS: Record<string, { limit: number; windowMs: number }> = {
-  // 一次完整搜索 = 每个插件 1 请求 + TG 按批请求（可达 17~32 个），
-  // 原 10 次/分会误伤正常用户的单次搜索，故放宽到 60（每分钟约 2 次完整搜索）
-  "/api/search": { limit: 60, windowMs: 60_000 },
+  // 一次完整搜索 = 每个插件 1 请求（7）+ TG 每批 2 频道（69 频道 → 35 批）≈ 42 请求，
+  // 自动暂停后点"继续"只是把剩下的请求发完，不额外增加。
+  // 300/分 ≈ 每分钟 7 次完整搜索：正常用户连搜几次 + 继续都不会被拦，
+  // 同时单 IP 的上游扇出仍有上限（单请求频道数另有 ≤8 的硬上限）。
+  "/api/search": { limit: 300, windowMs: 60_000 },
   // 探活每次最多 50 个链接 → 对上游请求放大 50x，需单独收紧防打爆网盘接口
   "/api/check": { limit: 15, windowMs: 60_000 },
   "/api/hot-searches": { limit: 30, windowMs: 60_000 },
+  // 豆瓣封面代理：榜单每页 25 张图，翻页/切分类会连续加载，给足余量
+  "/api/img": { limit: 240, windowMs: 60_000 },
 };
 
 const DEFAULT_LIMIT = { limit: 60, windowMs: 60_000 };
-const CLEANUP_INTERVAL = 5 * 60_000; // 5 分钟清理一次
-const DEFAULT_MAX_STORE_ENTRIES = 100_000; // store 上限，防内存 DoS
+const CLEANUP_INTERVAL = 60_000; // 1 分钟清理一次过期项
+// 键 = IP + pathname，单条 < 100B；1 万条约 1~2MB
+const DEFAULT_MAX_STORE_ENTRIES = 10_000;
 
-/** 是否显式声明前置了可信代理（CF / nginx 等）。默认 false → 不信任任何代理头 */
-function trustProxy(): boolean {
-  return process.env.TRUST_PROXY === "1";
-}
-
-/** IPv4-mapped IPv6 规范化：::ffff:1.2.3.4 -> 1.2.3.4 */
-export function normalizeIp(ip: string): string {
-  const v = ip.trim();
-  if (v.startsWith("::ffff:")) return v.slice(7);
-  return v;
-}
-
-/** 严格校验 IP 格式，防止代理头塞任意字符串撑爆 store */
-export function isValidIp(ip: string): boolean {
-  return isIP(normalizeIp(ip)) > 0;
-}
-
-/** 客户端 IP 获取（详见文件头注释） */
-export function getClientIp(event: any): string {
-  const ctx = event.context?.clientAddress;
-  if (typeof ctx === "string" && ctx) return normalizeIp(ctx);
-
-  if (trustProxy()) {
-    const cf = getHeader(event, "cf-connecting-ip");
-    if (typeof cf === "string" && isValidIp(cf)) return normalizeIp(cf);
-    const xff = getHeader(event, "x-forwarded-for");
-    if (typeof xff === "string" && xff) {
-      const first = xff.split(",")[0]?.trim() || "";
-      if (isValidIp(first)) return normalizeIp(first);
-    }
-  }
-
-  const sock = event.node?.req?.socket?.remoteAddress;
-  if (typeof sock === "string" && sock) return normalizeIp(sock);
-  return "unknown";
+/** 去掉 query / hash，只留 pathname（h3 1.x 的 event.path 含 query） */
+export function toPathname(path: string): string {
+  const i = path.search(/[?#]/);
+  return i >= 0 ? path.slice(0, i) : path;
 }
 
 export function getRateLimit(pathname: string, limits: Record<string, { limit: number; windowMs: number }>, defaultLimit: { limit: number; windowMs: number }) {
@@ -105,7 +76,7 @@ export function createRateLimitMiddleware(config: RateLimitConfig = {}) {
 
   return defineEventHandler((event: any) => {
     // 只限制 API 路由（健康检查和认证排除限流）
-    const path = event.path || "";
+    const path = toPathname(event.path || "");
     if (!path.startsWith("/api/")) return;
     if (path === "/api/health") return;
 
@@ -116,18 +87,21 @@ export function createRateLimitMiddleware(config: RateLimitConfig = {}) {
     const key = `${ip}:${path}`;
     const now = Date.now();
 
-    // store 超限：先清一次过期项；仍超则降级放行（宁可漏限，不可被内存打挂）
-    if (store.size >= maxStoreEntries) {
-      for (const [k, entry] of store) {
-        if (now > entry.resetTime) store.delete(k);
-      }
-      if (store.size >= maxStoreEntries) {
-        return;
-      }
-    }
-
     let entry = store.get(key);
     if (!entry || now > entry.resetTime) {
+      // 新窗口：先删再插，保持 Map 插入序 ≈ 窗口开始时间序，便于按"最旧"淘汰
+      if (entry) store.delete(key);
+      // store 满：先清过期项；仍满则淘汰最旧条目（绝不对所有人降级放行）
+      if (store.size >= maxStoreEntries) {
+        for (const [k, e] of store) {
+          if (now > e.resetTime) store.delete(k);
+        }
+        while (store.size >= maxStoreEntries) {
+          const oldest = store.keys().next().value;
+          if (oldest === undefined) break;
+          store.delete(oldest);
+        }
+      }
       entry = { count: 0, resetTime: now + windowMs };
       store.set(key, entry);
     }
