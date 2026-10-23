@@ -1,18 +1,11 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { readBody, createError, getRequestHeader } from "h3";
+import { readBody, createError } from "h3";
 import { createAuthToken, setAuthCookie } from "../../utils/auth";
 import { getUnlockRateLimiter } from "../../utils/unlockRateLimiter";
+import { getClientIp } from "../../utils/clientIp";
 
 function hash(s: string): Buffer {
   return createHash("sha256").update(s, "utf8").digest();
-}
-
-function getClientIp(event: any): string {
-  return (
-    getRequestHeader(event, "x-forwarded-for")?.split(",")[0]?.trim() ||
-    getRequestHeader(event, "x-real-ip") ||
-    "unknown"
-  );
 }
 
 export default defineEventHandler(async (event) => {
