@@ -150,7 +150,7 @@ async function testSearchPostTG() {
     kw: KW,
     src: "tg",
     res: "results",
-    channels: "tgsearchers3",
+    channels: "Quark_Movies",
     refresh: true,
     ext: { __plugin_timeout_ms: 6000 },
   };
