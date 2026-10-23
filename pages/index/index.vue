@@ -456,7 +456,7 @@ function visibleSorted(items: any[]) {
   align-items: stretch;
   gap: 0;
   position: relative;
-  background: linear-gradient(145deg, rgba(15, 118, 110, 0.12) 0%, rgba(15, 118, 110, 0.04) 35%, rgba(245, 158, 11, 0.06) 70%, rgba(15, 118, 110, 0.08) 100%);
+  background: rgba(15, 118, 110, 0.12);
   border-radius: 20px;
   box-shadow: 0 4px 20px -4px rgba(15, 118, 110, 0.15);
   overflow: hidden;
@@ -487,7 +487,7 @@ function visibleSorted(items: any[]) {
   left: 0;
   width: 6px;
   height: 100%;
-  background: linear-gradient(180deg, var(--primary) 0%, var(--secondary) 50%, var(--primary) 100%);
+  background: var(--primary);
   opacity: 1;
 }
 
@@ -532,7 +532,7 @@ function visibleSorted(items: any[]) {
 }
 
 .hero-title-line--accent {
-  background: linear-gradient(120deg, var(--primary) 0%, #0d9488 40%, var(--secondary) 100%);
+  background: var(--primary);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -581,12 +581,13 @@ function visibleSorted(items: any[]) {
 }
 
 .hero-shape {
+  display: none;
   position: absolute;
   right: 8%;
   bottom: 10%;
   width: 120px;
   height: 120px;
-  background: linear-gradient(135deg, rgba(15, 118, 110, 0.15) 0%, rgba(245, 158, 11, 0.08) 100%);
+  background: rgba(15, 118, 110, 0.15);
   border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
   filter: blur(24px);
   pointer-events: none;
@@ -803,7 +804,7 @@ function visibleSorted(items: any[]) {
 }
 
 .filter-pill.active {
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  background: var(--primary);
   color: white;
   border-color: transparent;
   box-shadow: 0 4px 12px rgba(15, 118, 110, 0.28);
