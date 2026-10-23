@@ -1,4 +1,4 @@
-import { BaseAsyncPlugin } from "./manager";
+import { BaseAsyncPlugin, pluginSignal, pluginTimeout } from "./manager";
 import type { SearchResult, Link } from "../types/models";
 import { ofetch } from "ofetch";
 import pLimit from "p-limit";
@@ -66,34 +66,30 @@ export class DyyjvPlugin extends BaseAsyncPlugin {
     keyword: string,
     ext?: Record<string, any>
   ): Promise<SearchResult[]> {
-    const timeout = Math.max(
-      3000,
-      Number((ext as any)?.__plugin_timeout_ms) || 12000
-    );
+    const timeout = pluginTimeout(ext, 12000);
+    const signal = pluginSignal(ext);
     const kw = (keyword || "").trim();
     if (!kw) return [];
 
-    // 第一步：wp-json 搜索
-    let items: DyyjvItem[] = [];
-    try {
-      const json = await ofetch<any>(
-        `${BASE}/wp-json/wp/v2/search?search=${encodeURIComponent(kw)}&per_page=10`,
-        { headers: { "user-agent": UA, accept: "application/json" }, timeout }
-      );
-      items = parseDyyjvSearch(json);
-    } catch {
-      return [];
-    }
+    // 第一步：wp-json 搜索（失败直接抛出，计入熔断）
+    const json = await ofetch<any>(
+      `${BASE}/wp-json/wp/v2/search?search=${encodeURIComponent(kw)}&per_page=10`,
+      { headers: { "user-agent": UA, accept: "application/json" }, timeout, signal }
+    );
+    const items: DyyjvItem[] = parseDyyjvSearch(json);
     if (items.length === 0) return [];
 
     // 第二步：并发抓详情页提取链接
     const limitFn = pLimit(DETAIL_CONCURRENCY);
     const tasks = items.slice(0, MAX_DETAILS).map((item) =>
       limitFn(async (): Promise<SearchResult | null> => {
+        if (signal?.aborted) return null;
         try {
+          // 单个详情页失败只丢这一条
           const html = await ofetch<string>(`${BASE}/${item.id}.html`, {
             headers: { "user-agent": UA },
             timeout,
+            signal,
           });
           const links = extractDyyjvLinks(html);
           if (links.length === 0) return null;
