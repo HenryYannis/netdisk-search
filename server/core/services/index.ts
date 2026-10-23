@@ -17,15 +17,16 @@ import { loggers } from "../utils/logger";
 // See: data/panhub.shenzjd.com-20260706090537.log analysis
 // NOTE: 5 个死插件于 2026-08-04 删除（无引用）：zhizhen / hdr4k / muou / huban / shandian
 // NOTE: nyaa 于 2026-08-07 移除：纯磁力种子站（搜索结果只产出 magnet 链接），产品要求不出现磁力链接
-// NOTE: 2026-08-07 盘点：solidtorrents/torrentgalaxy/x1337x 纯磁力站按产品要求不注册；
-//       panyq/fox4k 实测死源已删除；susu/pan666 被 CF 拦（文件保留，绕过后再注册）
+// NOTE: 2026-08-07 盘点：panyq/fox4k 实测死源已删除
+// NOTE: 2026-10-23 删除：u3c3 / solidtorrents / torrentgalaxy / x1337x（纯磁力站，结果全被磁力过滤丢弃）；
+//       susu / pan666（从生产服务器实测仍被 Cloudflare 质询页 403 拦截）
+// 新增搜索源见 docs/ADDING_A_PLUGIN.md
 import { PansearchPlugin } from "../plugins/pansearch";
 import { MelostPlugin } from "../plugins/melost";
 import { Quark4kPlugin } from "../plugins/quark4k";
 import { OugePlugin } from "../plugins/ouge";
 import { WanouPlugin } from "../plugins/wanou";
 import { YunsoPlugin } from "../plugins/yunso";
-import { U3c3Plugin } from "../plugins/u3c3";
 import { DyyjvPlugin } from "../plugins/dyyjv";
 
 const SERVICE_CONTEXT_KEY = "__panhub_search_service__";
@@ -58,7 +59,6 @@ function createPluginManager(): PluginManager {
   safeRegister("ouge", () => new OugePlugin());
   safeRegister("wanou", () => new WanouPlugin());
   safeRegister("yunso", () => new YunsoPlugin());
-  safeRegister("u3c3", () => new U3c3Plugin());
   // 2026-08-07 新增：dyyjv（电影云集，WordPress REST API，详情页内嵌夸克/百度链接）
   safeRegister("dyyjv", () => new DyyjvPlugin());
   pm.registerAllGlobalPlugins();
@@ -105,18 +105,4 @@ export function getOrCreateSearchService(runtimeConfig: any): SearchService {
  */
 export function resetSearchService(): void {
   delete (globalThis as any)[SERVICE_CONTEXT_KEY];
-}
-
-/**
- * 获取搜索服务统计信息（用于监控）
- */
-export function getSearchServiceStats(): { exists: boolean; options?: SearchServiceOptions } {
-  const context = (globalThis as any)[SERVICE_CONTEXT_KEY];
-  if (!context) {
-    return { exists: false };
-  }
-  return {
-    exists: true,
-    options: context.options,
-  };
 }
