@@ -10,8 +10,8 @@ export default defineNuxtConfig({
   app: {
     head: {
       htmlAttrs: { lang: "zh-CN" },
-      title: "小宝网盘搜",
-      titleTemplate: "%s · 小宝网盘搜",
+      title: "小宝网盘搜索引擎",
+      titleTemplate: "%s · 小宝网盘搜索引擎",
       meta: [
         {
           name: "viewport",
@@ -21,7 +21,7 @@ export default defineNuxtConfig({
         {
           name: "description",
           content:
-            "小宝网盘搜：聚合阿里云盘、夸克、百度网盘、115、迅雷等平台的网盘搜索工具，实时检索分享资源，快速、高效。",
+            "小宝网盘搜索引擎：聚合阿里云盘、夸克、百度网盘、115、迅雷等平台的网盘搜索工具，实时检索分享资源，快速、高效。",
         },
         {
           name: "keywords",
@@ -30,7 +30,7 @@ export default defineNuxtConfig({
         },
         { name: "theme-color", content: "#111111" },
         { property: "og:type", content: "website" },
-        { property: "og:site_name", content: "小宝网盘搜" },
+        { property: "og:site_name", content: "小宝网盘搜索引擎" },
       ],
       link: [{ rel: "icon", type: "image/x-icon", href: "/favicon.ico" }],
     },
