@@ -212,7 +212,7 @@ function formatDate(d?: string) {
   left: 16px;
   right: 16px;
   height: 1px;
-  background: linear-gradient(90deg, var(--primary), transparent 70%);
+  background: var(--primary);
   opacity: 0.25;
 }
 
@@ -500,7 +500,7 @@ function formatDate(d?: string) {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: linear-gradient(135deg, var(--primary), #14b8a6);
+  background: var(--primary);
   color: white;
   border: none;
   border-radius: var(--radius-md);
