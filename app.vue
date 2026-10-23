@@ -5,7 +5,7 @@
       <nav class="nav">
         <NuxtLink to="/" class="brand">
           <span class="brand-icon">🔍</span>
-          <span class="brand-text">小宝网盘搜</span>
+          <span class="brand-text">小宝网盘搜索引擎</span>
         </NuxtLink>
 
         <div class="site-links" aria-label="小宝的其他网站">
@@ -73,7 +73,7 @@
           <a href="https://xbmlz.cn/" target="_blank" rel="noopener">命理站</a>
           <a href="https://xbyxz.cn/" target="_blank" rel="noopener">游戏站</a>
         </nav>
-        <p class="site-footer__copy">© {{ new Date().getFullYear() }} 小宝网盘搜 · 基于开源项目 PanHub（MIT）</p>
+        <p class="site-footer__copy">© {{ new Date().getFullYear() }} 小宝网盘搜索引擎 · 基于开源项目 PanHub（MIT）</p>
       </div>
     </footer>
 
