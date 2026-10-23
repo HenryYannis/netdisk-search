@@ -8,7 +8,6 @@ export const ALL_PLUGIN_NAMES = [
   "melost",
   "quark4k",
   "ouge",
-  "wanou",
   "yunso",
   // 2026-08-07 新增：dyyjv（电影云集）
   "dyyjv",
