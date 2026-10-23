@@ -1,4 +1,4 @@
-import { BaseAsyncPlugin } from "./manager";
+import { BaseAsyncPlugin, pluginSignal, pluginTimeout } from "./manager";
 import type { SearchResult, Link } from "../types/models";
 import { ofetch } from "ofetch";
 import { getLinkType } from "./panLink";
@@ -97,10 +97,8 @@ export class MelostPlugin extends BaseAsyncPlugin {
     keyword: string,
     ext?: Record<string, any>
   ): Promise<SearchResult[]> {
-    const timeout = Math.max(
-      3000,
-      Number((ext as any)?.__plugin_timeout_ms) || 12000
-    );
+    const timeout = pluginTimeout(ext, 12000);
+    const signal = pluginSignal(ext);
     const kw = (keyword || "").trim();
     if (!kw) return [];
 
@@ -140,7 +138,12 @@ export class MelostPlugin extends BaseAsyncPlugin {
         },
         body,
         timeout,
-      }).catch(() => undefined);
+        signal,
+      }).catch((err) => {
+        // 第 1 页失败 = 源不可用 → 抛出计入熔断；后续翻页失败保留已有结果
+        if (page === 1) throw err;
+        return undefined;
+      });
 
       const list = resp?.data?.list;
       if (!list || list.length === 0) break; // 无更多页
