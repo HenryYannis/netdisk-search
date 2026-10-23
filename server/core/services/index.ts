@@ -20,12 +20,12 @@ import { loggers } from "../utils/logger";
 // NOTE: 2026-08-07 盘点：panyq/fox4k 实测死源已删除
 // NOTE: 2026-10-23 删除：u3c3 / solidtorrents / torrentgalaxy / x1337x（纯磁力站，结果全被磁力过滤丢弃）；
 //       susu / pan666（从生产服务器实测仍被 Cloudflare 质询页 403 拦截）
+//       wanou（与 ouge 重复，两者都只剩 woog.nxog.eu.org 可用）
 // 新增搜索源见 docs/ADDING_A_PLUGIN.md
 import { PansearchPlugin } from "../plugins/pansearch";
 import { MelostPlugin } from "../plugins/melost";
 import { Quark4kPlugin } from "../plugins/quark4k";
 import { OugePlugin } from "../plugins/ouge";
-import { WanouPlugin } from "../plugins/wanou";
 import { YunsoPlugin } from "../plugins/yunso";
 import { DyyjvPlugin } from "../plugins/dyyjv";
 
@@ -57,7 +57,6 @@ function createPluginManager(): PluginManager {
   safeRegister("melost", () => new MelostPlugin());
   safeRegister("quark4k", () => new Quark4kPlugin());
   safeRegister("ouge", () => new OugePlugin());
-  safeRegister("wanou", () => new WanouPlugin());
   safeRegister("yunso", () => new YunsoPlugin());
   // 2026-08-07 新增：dyyjv（电影云集，WordPress REST API，详情页内嵌夸克/百度链接）
   safeRegister("dyyjv", () => new DyyjvPlugin());
