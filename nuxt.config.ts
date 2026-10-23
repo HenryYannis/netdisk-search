@@ -10,7 +10,7 @@ export default defineNuxtConfig({
   app: {
     head: {
       htmlAttrs: { lang: "zh-CN" },
-      title: "PanHub · 全网最全的网盘搜索",
+      title: "PanHub · 网盘搜索",
       titleTemplate: "%s · PanHub",
       meta: [
         {
@@ -21,7 +21,7 @@ export default defineNuxtConfig({
         {
           name: "description",
           content:
-            "PanHub：聚合阿里云盘、夸克、百度网盘、115、迅雷等平台的全网最全网盘搜索工具，实时检索分享资源，免费、快速、无广告。",
+            "PanHub：聚合阿里云盘、夸克、百度网盘、115、迅雷等平台的网盘搜索工具，实时检索分享资源，快速、高效。",
         },
         {
           name: "keywords",
@@ -73,7 +73,7 @@ export default defineNuxtConfig({
     cacheTtlMinutes: channelsConfig.cacheTtlMinutes,
     public: {
       apiBase: "/api",
-      siteUrl: "https://panhub.shenzjd.com",
+      siteUrl: "https://pan.xbkjz.icu",
       // 向前端暴露默认频道清单
       tgDefaultChannels: channelsConfig.defaultChannels,
     },
