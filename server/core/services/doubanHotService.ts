@@ -230,13 +230,46 @@ async function scrapeTop250(): Promise<DoubanHotItem[]> {
   return allItems;
 }
 
-/** 获取指定分类的全部数据（带缓存：内存 → Turso → 豆瓣） */
+/** 豆瓣拉取失败/被拦时的负缓存时长：避免每次页面访问都重新去撞豆瓣 */
+const NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1000;
+/** 同一分类的并发冷请求只发一次抓取（Top250 一次要 4 页 + 1.5s 间隔） */
+const inflightFetches = new Map<string, Promise<DoubanHotItem[]>>();
+
+/** 获取指定分类的全部数据（带缓存：内存 → Turso → 豆瓣；并发去重 + 失败负缓存） */
 async function fetchAllItems(categoryId: string): Promise<DoubanHotItem[]> {
+  // 未知分类直接返回，不占缓存（防随机 category 把真实榜单挤出 LRU）
+  if (!DOUBAN_HOT_SOURCES.some((s) => s.id === categoryId)) return [];
   const cacheKey = `douban-api:${categoryId}`;
 
-  // 1. 内存缓存（热启动秒回）
+  // 1. 内存缓存（热启动秒回；也包含 5 分钟的失败负缓存 []）
   const cached = allItemsCache.get(cacheKey);
   if (cached.hit && cached.value) return cached.value;
+
+  const existing = inflightFetches.get(cacheKey);
+  if (existing) return existing;
+
+  const p = fetchAllItemsUncached(categoryId, cacheKey)
+    .catch((e: any) => {
+      console.warn(`[DoubanAPI] ${categoryId} 拉取失败:`, e?.message);
+      return [] as DoubanHotItem[];
+    })
+    .then((items) => {
+      if (items.length === 0) {
+        allItemsCache.set(cacheKey, items, NEGATIVE_CACHE_TTL_MS);
+      }
+      return items;
+    })
+    .finally(() => {
+      inflightFetches.delete(cacheKey);
+    });
+  inflightFetches.set(cacheKey, p);
+  return p;
+}
+
+async function fetchAllItemsUncached(
+  categoryId: string,
+  cacheKey: string
+): Promise<DoubanHotItem[]> {
 
   // 2. Turso 持久化缓存（冷启动不丢，跨部署共享）
   const persisted = await getPersistedCache(cacheKey);
