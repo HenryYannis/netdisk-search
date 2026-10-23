@@ -2,7 +2,11 @@ import pLimit from "p-limit";
 import { UnifiedCache, CacheNamespace } from "../cache/unifiedCache";
 import { safeExecute } from "../utils/fetch";
 import type { MergedLinks, SearchResponse, SearchResult } from "../types/models";
-import { PluginManager, type AsyncSearchPlugin } from "../plugins/manager";
+import {
+  PluginManager,
+  clampPluginTimeout,
+  type AsyncSearchPlugin,
+} from "../plugins/manager";
 import {
   PluginHealthChecker,
   createPluginHealthChecker,
@@ -73,6 +77,17 @@ function normalizeSearchResult(raw: any): SearchResult {
   };
 }
 
+/** 插件 / TG 频道任务超时（withTimeout 抛出，计为失败） */
+export class PluginTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`timeout after ${ms}ms`);
+    this.name = "PluginTimeoutError";
+  }
+}
+
+/** 每个命名空间的缓存内存预算（估算值）。两个命名空间共 48MB，适配 512MB 堆 / 768MB 容器 */
+const CACHE_NAMESPACE_MAX_BYTES = 24 * 1024 * 1024;
+
 export interface SearchServiceOptions {
   priorityChannels: string[];
   defaultChannels: string[];
@@ -87,6 +102,8 @@ export class SearchService {
   private static readonly TG_DEEP_CHANNEL_LIMIT = 160;
   private static readonly TG_DEEP_SEARCH_TRIGGER = 3;
   private static readonly PLUGIN_VARIANT_TRIGGER = 5;
+  /** 单请求最多 TG 频道数（前端每批 2 个；不传频道时默认频道也截断到此数） */
+  static readonly MAX_TG_CHANNELS = 8;
 
   private options: SearchServiceOptions;
   private pluginManager: PluginManager;
@@ -100,6 +117,7 @@ export class SearchService {
       {
         enabled: options.cacheEnabled,
         ttlMinutes: options.cacheTtlMinutes,
+        maxMemoryBytes: CACHE_NAMESPACE_MAX_BYTES,
       },
       "search"
     );
@@ -158,12 +176,16 @@ export class SearchService {
 
     const errorCollector = new ErrorCollector();
     const requestStart = Date.now();
-    const effChannels =
-      channels && channels.length > 0 ? channels : this.options.defaultChannels;
-    const effConcurrency =
+    // 频道数硬上限：防止一次请求扇出成上千次 t.me 抓取
+    const effChannels = (
+      channels && channels.length > 0 ? channels : this.options.defaultChannels
+    ).slice(0, SearchService.MAX_TG_CHANNELS);
+    const effConcurrency = Math.min(
+      16,
       concurrency && concurrency > 0
         ? concurrency
-        : this.options.defaultConcurrency;
+        : this.options.defaultConcurrency
+    );
     const effResultType =
       !resultType || resultType === "merge" ? "merged_by_type" : resultType;
     const effSourceType = sourceType ?? "all";
@@ -292,8 +314,16 @@ export class SearchService {
     ext?: Record<string, any>,
     signal?: AbortSignal
   ): Promise<SearchResult[]> {
-    const chList = Array.isArray(channels) ? channels : [];
-    const cacheKey = `tg:${keyword}:${[...chList].sort().join(",")}`;
+    const chList = Array.isArray(channels)
+      ? channels.slice(0, SearchService.MAX_TG_CHANNELS)
+      : [];
+    // 深搜开关（前端分批请求时通过 ext.__deep_search 控制）：
+    // 前端把 TG 频道拆成小批次（每批 2 个）请求后，若仍按"本批结果<3"判断，
+    // 冷门词会让每一批都误触发深搜翻页（67 频道×8 页 = CPU 炸弹），
+    // 因此只允许最后一批深搜（深搜只增结果，不减结果）。
+    const allowDeep = (ext as any)?.__deep_search !== false;
+    // 缓存键带深搜标记：否则浅搜的 1~2 条结果会被缓存后喂给允许深搜的请求，30 分钟内都不会深搜
+    const cacheKey = `tg:${allowDeep ? "deep" : "shallow"}:${keyword}:${[...chList].sort().join(",")}`;
     const { cacheEnabled, priorityChannels } = this.options;
 
     if (!forceRefresh && cacheEnabled) {
@@ -304,13 +334,7 @@ export class SearchService {
     }
 
     const { fetchTgChannelPosts } = await import("./tg");
-    const requestedTimeout = Number((ext as any)?.__plugin_timeout_ms) || 0;
-    const timeoutMs = Math.max(
-      3000,
-      requestedTimeout > 0
-        ? requestedTimeout
-        : this.options.pluginTimeoutMs || 0
-    );
+    const timeoutMs = this.resolveTimeout(ext);
     const concurrency = Math.max(
       2,
       Math.min(concurrencyOverride ?? this.options.defaultConcurrency, 5)
@@ -339,7 +363,6 @@ export class SearchService {
                 signal: mergedSignal,
               }),
               timeoutMs,
-              [],
               controller
             ),
           []
@@ -365,11 +388,6 @@ export class SearchService {
     );
 
     let results = shallowResults;
-    // 深搜开关（前端分批请求时通过 ext.__deep_search 控制）：
-    // 前端把 TG 频道拆成小批次（每批 2 个）请求后，若仍按"本批结果<3"判断，
-    // 冷门词会让每一批都误触发深搜翻页（67 频道×8 页 = CPU 炸弹），
-    // 因此只允许最后一批深搜（深搜只增结果，不减结果）。
-    const allowDeep = (ext as any)?.__deep_search !== false;
     if (
       allowDeep &&
       results.length < SearchService.TG_DEEP_SEARCH_TRIGGER &&
@@ -385,7 +403,7 @@ export class SearchService {
       results = this.mergeUniqueResults(results, deepResults);
     }
 
-    if (cacheEnabled && results.length > 0) {
+    if (cacheEnabled && results.length > 0 && !signal?.aborted) {
       this.cache.set(CacheNamespace.TG_SEARCH, cacheKey, results);
     }
 
@@ -440,26 +458,18 @@ export class SearchService {
       available = healthyPlugins;
     }
 
-    const requestedTimeout = Number((ext as any)?.__plugin_timeout_ms) || 0;
-    const timeoutMs = Math.max(
-      3000,
-      requestedTimeout > 0
-        ? requestedTimeout
-        : this.options.pluginTimeoutMs || 0
-    );
+    // 超时统一在这里钳制到 [3s, 15s]，并把钳制后的值传给插件（插件的 ofetch timeout 用它）
+    const timeoutMs = this.resolveTimeout(ext);
 
     const pluginPromises = available.map((plugin) => async () => {
-      plugin.setMainCacheKey(cacheKey);
-      plugin.setCurrentKeyword(keyword);
-
       const startTime = Date.now();
       const pluginName = plugin.name();
 
       try {
-        const queries =
-          (keyword || "").trim().length <= 1
-            ? [keyword, "电影", "movie", "1080p"]
-            : buildSearchKeywordVariants(keyword).slice(0, 3);
+        // 1 个字的关键词只搜它本身（不再替换成"电影/movie/1080p"之类无关词）
+        const trimmed = (keyword || "").trim();
+        const variants = buildSearchKeywordVariants(trimmed).slice(0, 3);
+        const queries = variants.length > 0 ? variants : [trimmed];
 
         let results: SearchResult[] = [];
         for (const [index, query] of queries.entries()) {
@@ -467,18 +477,36 @@ export class SearchService {
           if (signal?.aborted) break;
 
           // 为每次插件请求创建独立的 AbortController，
-          // 超时后 withTimeout 会 abort，使底层请求有机会被真正取消（而非泄漏）
+          // 超时后 withTimeout 会 abort，插件把 ext.signal 传给 ofetch，底层请求被真正取消
           const controller = new AbortController();
           // 将外部取消和超时合并：任一触发都会 abort
           const mergedSignal = signal
             ? AbortSignal.any([signal, controller.signal])
             : controller.signal;
-          const currentResults = await this.withTimeout<SearchResult[]>(
-            plugin.search(query, { ...ext, signal: mergedSignal }),
-            timeoutMs,
-            [],
-            controller
-          );
+          let currentResults: SearchResult[];
+          try {
+            currentResults = await this.withTimeout<SearchResult[]>(
+              plugin.search(query, {
+                ...ext,
+                __plugin_timeout_ms: timeoutMs,
+                signal: mergedSignal,
+              }),
+              timeoutMs,
+              controller
+            );
+          } catch (err) {
+            // 客户端断开导致的失败不算插件的错
+            if (signal?.aborted) break;
+            // 第一个查询就失败（超时/网络/HTTP 错误）→ 源不可用，计入熔断
+            if (index === 0) throw err;
+            // 后续变体失败：保留已有结果，不再继续
+            loggers.search.debug("插件变体查询失败，保留已有结果", {
+              plugin: pluginName,
+              query,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            break;
+          }
 
           results = this.mergeUniqueResults(
             results,
@@ -493,11 +521,15 @@ export class SearchService {
           }
         }
 
-        const responseTime = Date.now() - startTime;
-        this.healthChecker.recordSuccess(pluginName, responseTime);
+        if (!signal?.aborted) {
+          const responseTime = Date.now() - startTime;
+          this.healthChecker.recordSuccess(pluginName, responseTime);
+        }
 
         return results;
       } catch (error) {
+        // 客户端已断开：不计入插件失败，也不产生告警
+        if (signal?.aborted) return [];
         const errorMs = Date.now() - startTime;
         this.healthChecker.recordFailure(pluginName);
 
@@ -533,28 +565,39 @@ export class SearchService {
       }
     }
 
-    if (cacheEnabled && merged.length > 0) {
+    if (cacheEnabled && merged.length > 0 && !signal?.aborted) {
       this.cache.set(CacheNamespace.PLUGIN_SEARCH, cacheKey, merged);
     }
 
     return merged;
   }
 
+  /** 超时：请求值（ext.__plugin_timeout_ms）或配置默认值，钳制到 [3s, 15s] */
+  private resolveTimeout(ext?: Record<string, any>): number {
+    return clampPluginTimeout(
+      (ext as any)?.__plugin_timeout_ms,
+      this.options.pluginTimeoutMs || 8000
+    );
+  }
+
+  /**
+   * 超时即 reject（PluginTimeoutError）并 abort 底层请求。
+   * 以前超时返回 [] 会被当成"成功但无结果"，熔断永远不会打开（M2）。
+   */
   private withTimeout<T>(
     promise: Promise<T>,
     ms: number,
-    fallback: T,
     controller?: AbortController
   ): Promise<T> {
     if (!ms || ms <= 0) return promise;
     let timeoutHandle: any;
-    const timeoutPromise = new Promise<T>((resolve) => {
+    const timeoutPromise = new Promise<T>((_resolve, reject) => {
       timeoutHandle = setTimeout(() => {
         // 超时后取消底层请求，避免 socket/内存泄漏
         if (controller && !controller.signal.aborted) {
           controller.abort();
         }
-        resolve(fallback);
+        reject(new PluginTimeoutError(ms));
       }, ms);
     });
     return Promise.race([
@@ -629,7 +672,6 @@ export class SearchService {
           password: link.password,
           note: result.title,
           datetime: result.datetime,
-          images: result.images,
         });
       }
     }
