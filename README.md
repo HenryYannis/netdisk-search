@@ -77,7 +77,9 @@ cd netdisk-search
 docker compose up -d --build
 ```
 
-启动后访问 `http://服务器IP:4000`。热搜数据保存在 `./data`。
+服务默认只监听本机 `127.0.0.1:4000`（见 `docker-compose.yml`），需通过 Cloudflare Tunnel 或 Nginx 等反向代理对外提供访问；本机可用 `curl http://127.0.0.1:4000/api/health` 自检。热搜数据保存在 `./data`。
+
+> 由于开启了 `TRUST_PROXY=1`（信任 `CF-Connecting-IP` 头做限流），请不要把 4000 端口直接暴露到公网，否则客户端可伪造该头绕过限流。若不经过代理、需要直接用 IP 访问，请同时把端口改回 `"4000:4000"` 并删除 `TRUST_PROXY`。
 
 > 搜索依赖抓取 Telegram 频道，服务器需要能直接访问 Telegram（一般部署在海外服务器）。
 
