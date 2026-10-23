@@ -187,17 +187,17 @@ onMounted(async () => {
 
 // SEO 元数据
 useSeoMeta({
-  title: "小宝网盘搜 - 网盘资源搜索",
+  title: "网盘资源搜索",
   description:
     "聚合阿里云盘、夸克、百度网盘、115、迅雷等平台，实时检索各类分享链接与资源，免费、快速、无广告。",
-  ogTitle: "小宝网盘搜 - 网盘资源搜索",
+  ogTitle: "网盘资源搜索",
   ogDescription:
     "聚合阿里云盘、夸克、百度网盘、115、迅雷等平台，实时检索各类分享链接与资源，免费、快速、无广告。",
   ogType: "website",
-  ogSiteName: "小宝网盘搜",
+  ogSiteName: "小宝网盘搜索引擎",
   ogImage: siteUrl ? `${siteUrl}/og.svg` : "/og.svg",
   twitterCard: "summary_large_image",
-  twitterTitle: "小宝网盘搜 - 网盘资源搜索",
+  twitterTitle: "网盘资源搜索",
   twitterDescription:
     "聚合阿里云盘、夸克、百度网盘、115、迅雷等平台，实时检索各类分享链接与资源，免费、快速、无广告。",
   twitterImage: siteUrl ? `${siteUrl}/og.svg` : "/og.svg",
@@ -209,7 +209,7 @@ useHead({
     {
       name: "keywords",
       content:
-        "小宝网盘搜, 网盘搜索, 阿里云盘搜索, 夸克网盘搜索, 百度网盘搜索, 115 网盘, 迅雷云盘, 资源搜索, 盘搜, PanHub",
+        "小宝网盘搜索引擎, 网盘搜索, 阿里云盘搜索, 夸克网盘搜索, 百度网盘搜索, 115 网盘, 迅雷云盘, 资源搜索, 盘搜, PanHub",
     },
   ],
   script: [
@@ -218,7 +218,7 @@ useHead({
       innerHTML: JSON.stringify({
         "@context": "https://schema.org",
         "@type": "WebSite",
-        name: "小宝网盘搜",
+        name: "小宝网盘搜索引擎",
         url: siteUrl || "",
         potentialAction: {
           "@type": "SearchAction",
