@@ -305,7 +305,7 @@ onBeforeUnmount(() => {
 
 /* 主要按钮 - 渐变背景 */
 .action-btn.primary {
-  background: linear-gradient(135deg, var(--primary), #14b8a6);
+  background: var(--primary);
   color: white;
   box-shadow: 0 4px 12px rgba(15, 118, 110, 0.3);
 }
@@ -339,7 +339,7 @@ onBeforeUnmount(() => {
 
 /* 暂停按钮 - 黄色警告样式 */
 .action-btn.pause {
-  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+  background: #f59e0b;
   color: white;
   box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
 }
@@ -355,7 +355,7 @@ onBeforeUnmount(() => {
 
 /* 继续按钮 - 绿色成功样式 */
 .action-btn.resume {
-  background: linear-gradient(135deg, #10b981, #34d399);
+  background: #10b981;
   color: white;
   box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
 }
@@ -371,7 +371,7 @@ onBeforeUnmount(() => {
 
 /* 重置按钮 - 红色样式 */
 .action-btn.reset {
-  background: linear-gradient(135deg, #ef4444, #f87171);
+  background: #ef4444;
   color: white;
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
