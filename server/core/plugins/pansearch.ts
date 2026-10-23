@@ -1,4 +1,4 @@
-import { BaseAsyncPlugin } from "./manager";
+import { BaseAsyncPlugin, pluginSignal, pluginTimeout } from "./manager";
 import type { SearchResult } from "../types/models";
 import { fetchWithRetry } from "../utils/fetch";
 
@@ -11,28 +11,53 @@ const WEBSITE = "https://www.pansearch.me/search";
 const DATA = (buildId: string) =>
   `https://www.pansearch.me/_next/data/${buildId}/search.json`;
 
+interface ReqOpts {
+  timeout: number;
+  signal?: AbortSignal;
+}
+
+/** buildId 失效的信号：404，或返回的不是 Next data JSON（如被重定向到 HTML 页面） */
+function isStaleBuildIdResponse(err: unknown, resp: unknown): boolean {
+  if (err) return (err as any)?.statusCode === 404;
+  return !resp || typeof resp !== "object" || !("pageProps" in (resp as any));
+}
+
+async function fetchData(buildId: string, keyword: string, opts: ReqOpts) {
+  const url = `${DATA(buildId)}?keyword=${encodeURIComponent(keyword)}&offset=0`;
+  try {
+    const resp = await fetchWithRetry<Resp>(
+      url,
+      { headers: { "user-agent": "Mozilla/5.0" } },
+      // 不做重试：超时由 SearchService 统一控制，重试只会把一次失败拖到几十秒
+      { maxRetries: 0, timeout: opts.timeout, logWarnings: false, signal: opts.signal }
+    );
+    return { resp, err: undefined as unknown };
+  } catch (err) {
+    return { resp: undefined, err };
+  }
+}
+
 export class PansearchPlugin extends BaseAsyncPlugin {
   constructor() {
     super("pansearch", 3);
   }
-  override async search(keyword: string): Promise<SearchResult[]> {
-    const buildId = await getBuildId().catch(() => "");
-    if (!buildId) return [];
-    const url = `${DATA(buildId)}?keyword=${encodeURIComponent(
-      keyword
-    )}&offset=0`;
-    const resp = await fetchWithRetry<Resp>(
-      url,
-      {
-        headers: { "user-agent": "Mozilla/5.0" },
-      },
-      {
-        maxRetries: 2,
-        timeout: 8000,
-        logWarnings: false,
-      }
-    ).catch(() => undefined);
-    const items = resp?.pageProps?.data?.data || [];
+  override async search(
+    keyword: string,
+    ext?: Record<string, any>
+  ): Promise<SearchResult[]> {
+    const opts: ReqOpts = { timeout: pluginTimeout(ext), signal: pluginSignal(ext) };
+    let buildId = await getBuildId(opts);
+    let { resp, err } = await fetchData(buildId, keyword, opts);
+
+    // pansearch 重新部署后旧 buildId 会 404：清掉缓存、重新拿 buildId 再试一次
+    if (!opts.signal?.aborted && isStaleBuildIdResponse(err, resp)) {
+      invalidateBuildId();
+      buildId = await getBuildId(opts);
+      ({ resp, err } = await fetchData(buildId, keyword, opts));
+    }
+    if (err) throw err;
+
+    const items = (resp as Resp | undefined)?.pageProps?.data?.data || [];
     const out: SearchResult[] = [];
     for (const it of items) {
       const link = extractLink(it.content);
@@ -53,25 +78,29 @@ export class PansearchPlugin extends BaseAsyncPlugin {
   }
 }
 
-// buildId 是 Next.js 构建产物 ID，变化频率以天/部署计，缓存 1 小时避免每次搜索都重抓首页
+// buildId 是 Next.js 构建产物 ID，变化频率以天/部署计，缓存 1 小时避免每次搜索都重抓首页；
+// 数据接口 404 / 非 JSON 时会主动失效（见 search）
 let cachedBuildId: { value: string; expires: number } | null = null;
 const BUILD_ID_TTL = 3600_000; // 1 小时
 
-async function getBuildId(): Promise<string> {
+function invalidateBuildId(): void {
+  cachedBuildId = null;
+}
+
+/** 仅测试用 */
+export function _resetPansearchBuildId(): void {
+  cachedBuildId = null;
+}
+
+async function getBuildId(opts: ReqOpts): Promise<string> {
   if (cachedBuildId && Date.now() < cachedBuildId.expires) {
     return cachedBuildId.value;
   }
 
   const html = await fetchWithRetry<string>(
     WEBSITE,
-    {
-      headers: { "user-agent": "Mozilla/5.0" },
-    },
-    {
-      maxRetries: 2,
-      timeout: 8000,
-      logWarnings: false,
-    }
+    { headers: { "user-agent": "Mozilla/5.0" } },
+    { maxRetries: 0, timeout: opts.timeout, logWarnings: false, signal: opts.signal }
   );
   const m = /"buildId":"([^"]+)"/.exec(html);
   if (m) {
@@ -91,7 +120,7 @@ async function getBuildId(): Promise<string> {
       }
     } catch {}
   }
-  throw new Error("no buildId");
+  throw new Error("pansearch: no buildId");
 }
 
 function extractLink(content: string): { url: string; password: string } {
